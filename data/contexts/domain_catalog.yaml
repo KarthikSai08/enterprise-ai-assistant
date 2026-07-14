@@ -1,0 +1,516 @@
+# =============================================================================
+# domain_catalog.yaml
+# Maps business domains to the tables that answer questions in that domain.
+# This is the FIRST layer of retrieval — before any vector search.
+#
+# Think of it as a routing table:
+#   User says "sales" → only look in sales-domain tables → much more accurate
+#
+# HOW TO SCALE: Add new domain blocks. Add new keywords as users ask
+#               questions you haven't covered yet.
+# =============================================================================
+
+version: "1.0"
+last_updated: "2026-07"
+
+# -----------------------------------------------------------------------------
+# SCHEMA:
+#   domain_name:
+#     description:    what this domain covers
+#     primary_tables: tables that directly answer questions in this domain
+#     support_tables: tables needed for JOINs/lookups in this domain
+#     trigger_keywords: words/phrases that indicate this domain
+#     anti_keywords:  words that seem similar but belong to a DIFFERENT domain
+#                     (used to prevent wrong domain selection)
+# -----------------------------------------------------------------------------
+
+domains:
+
+  sales:
+    description: >
+      Covers all sales transactions, invoice values, revenue, GST amounts,
+      delivery weights, dealer/distributor sales performance, sale orders,
+      and sales returns.
+    primary_tables:
+      - tbl_SaleInvoiceHeader
+      - vw_AllInvoices
+    support_tables:
+      - tbl_SaleInvoiceDetail
+      - tbl_SaleOrder
+      - tbl_SaleReturn
+      - tbl_Organization
+      - dim_Status
+      - dim_PaymentTerm
+      - dim_TaxRate
+      - tbl_ProductMaster
+    trigger_keywords:
+      - sales
+      - revenue
+      - invoice
+      - billing
+      - amount
+      - grand total
+      - gst
+      - sgst
+      - cgst
+      - igst
+      - net weight
+      - gross weight
+      - vehicle number
+      - confirmed invoice
+      - draft invoice
+      - sale order
+      - sale return
+      - dealer wise
+      - distributor wise
+      - sold
+      - most
+      - delivery
+      - delivered
+      - tonnage
+      - weight
+    anti_keywords:
+      - purchase rate
+      - purchase schedule
+      - booking
+      - employee salary
+      - attendance
+      - stock transfer
+
+  bookings:
+    description: >
+      Covers booking records, orders placed by dealers, pending delivery
+      quantities, booking confirmation status, and C&F agent bookings.
+    primary_tables:
+      - tbl_Booking
+    support_tables:
+      - tbl_BookingDelivery
+      - tbl_Organization
+      - dim_Status
+      - tbl_ProductMaster
+    trigger_keywords:
+      - booking
+      - order
+      - pending delivery
+      - pending quantity
+      - outstanding
+      - balance quantity
+      - open orders
+      - booked quantity
+      - confirmed booking
+      - cnf agent
+      - carrying agent
+      - dealer order
+      - booking status
+      - unconfirmed booking
+    anti_keywords:
+      - invoice
+      - billed
+      - purchase schedule
+      - attendance
+
+  purchase:
+    description: >
+      Covers procurement activities — purchase enquiries, purchase schedules,
+      purchase orders, purchase invoices, vendor evaluation, vehicle trips,
+      and sauda (purchase deal) conversions.
+    primary_tables:
+      - tbl_PurchaseEnquiry
+      - tbl_PurchaseSchedule
+      - tbl_PurchaseOrder
+    support_tables:
+      - tbl_PurchaseInvoice
+      - vw_AllInvoices
+      - tbl_VendorEvaluation
+      - tbl_ProductMaster
+      - tbl_ProductClass
+      - dim_Status
+      - tbl_Organization
+    trigger_keywords:
+      - purchase
+      - procurement
+      - purchase schedule
+      - purchase order
+      - purchase invoice
+      - vendor
+      - supplier
+      - sauda
+      - enquiry
+      - enquiries
+      - vehicle schedule
+      - vehicle schedules
+      - vehicle dispatched
+      - vehicles dispatched
+      - purchase rate
+      - raw material
+      - material enquiry
+      - purchase status
+      - vendor evaluation
+      - po
+      - pi
+      - schedule
+      - schedules
+      - correction
+      - trip
+    anti_keywords:
+      - sales invoice
+      - dealer sales
+      - revenue
+      - booking
+      - employee
+
+  rates:
+    description: >
+      Covers declared selling rates and purchase/procurement rates,
+      including rate bands, rate approvals, and historical rate trends.
+    primary_tables:
+      - tbl_GlobalSaleRate
+      - tbl_GlobalPurchaseRate
+      - tbl_RateBand
+    support_tables:
+      - tbl_RateApproval
+      - tbl_ProductMaster
+      - tbl_ProductGrade
+    trigger_keywords:
+      - rate
+      - price
+      - selling rate
+      - sale rate
+      - purchase rate
+      - buying rate
+      - rate band
+      - rate bands
+      - rate slab
+      - tiered rate
+      - current rate
+      - latest rate
+      - today rate
+      - declared rate
+      - rate history
+      - rate trend
+      - rate approval
+      - procurement rate
+      - declared
+      - rates
+    anti_keywords:
+      - invoice amount
+      - total sales
+      - booking quantity
+      - attendance
+
+  master_data:
+    description: >
+      Covers organization master data (dealers, distributors, vendors,
+      C&F agents), organization types, status codes, UOM, payment terms,
+      tax rates, and geographic reference data.
+    primary_tables:
+      - tbl_Organization
+      - dim_OrgType
+      - dim_Status
+      - dim_UOM
+      - dim_PaymentTerm
+      - dim_TaxRate
+      - dmn_Country
+      - dmn_State
+      - dmn_City
+    support_tables:
+      - tbl_OrgBankDetail
+      - tbl_OrgContact
+      - tbl_OrgRegistration
+      - tbl_OrgAddress
+    trigger_keywords:
+      - dealer list
+      - distributor list
+      - organization
+      - firm name
+      - company name
+      - dealer name
+      - vendor list
+      - supplier
+      - status
+      - uom
+      - unit of measure
+      - payment term
+      - tax rate
+      - country
+      - state
+      - city
+      - organization type
+      - how many dealers
+      - list of
+      - party
+      - dealer
+      - distributors
+      - vendor
+      - dealers
+      - list all
+      - show all
+      - cnf agent
+      - c and f agent
+      - carrying and forwarding
+      - carrying agent
+      - registered
+      - names list
+      - organization types
+      - company names
+    anti_keywords:
+      - purchase schedule
+      - salary
+
+  product:
+    description: >
+      Covers product classification, product master data, product grades,
+      pricing, and material categories.
+    primary_tables:
+      - tbl_ProductMaster
+      - tbl_ProductCategory
+      - tbl_ProductClass
+    support_tables:
+      - tbl_ProductGrade
+      - tbl_ProductPricing
+      - dim_UOM
+      - dim_TaxRate
+    trigger_keywords:
+      - product
+      - item
+      - material
+      - category
+      - classification
+      - product type
+      - material type
+      - product class
+      - grade
+      - hsn code
+      - pricing
+      - unit price
+      - product category
+      - product master
+    anti_keywords:
+      - invoice
+      - booking
+      - rate
+      - employee
+      - attendance
+
+  inventory:
+    description: >
+      Covers warehouse stock, stock movements, stock transfers,
+      physical inventory counts, and inventory adjustments.
+    primary_tables:
+      - tbl_StockLedger
+      - tbl_Warehouse
+    support_tables:
+      - tbl_StockTransfer
+      - tbl_PhysicalInventory
+      - tbl_InventoryAdjustment
+      - tbl_ProductMaster
+      - dim_UOM
+      - dim_Status
+    trigger_keywords:
+      - stock
+      - inventory
+      - warehouse
+      - stock ledger
+      - balance quantity
+      - stock transfer
+      - physical inventory
+      - inventory adjustment
+      - stock movement
+      - godown
+      - in stock
+      - out of stock
+      - reorder level
+      - minimum stock
+    anti_keywords:
+      - invoice
+      - sales
+      - booking
+      - purchase order
+      - payroll
+
+  hr_payroll:
+    description: >
+      Covers employee master data, attendance, leave applications,
+      payroll processing, and salary components.
+    primary_tables:
+      - tbl_Employee
+      - tbl_Department
+      - tbl_Designation
+    support_tables:
+      - tbl_Attendance
+      - tbl_LeaveApplication
+      - tbl_LeaveType
+      - tbl_PayrollHeader
+      - tbl_PayrollDetail
+      - dim_Status
+    trigger_keywords:
+      - employee
+      - staff
+      - department
+      - designation
+      - attendance
+      - leave
+      - salary
+      - payroll
+      - pay slip
+      - gross pay
+      - net pay
+      - deduction
+      - joining date
+      - date of birth
+      - hr
+      - human resources
+    anti_keywords:
+      - invoice
+      - sales
+      - purchase
+      - booking
+      - stock
+
+  finance_accounts:
+    description: >
+      Covers financial accounting — account groups, ledgers, journal vouchers,
+      payments received and made, credit/debit notes.
+    primary_tables:
+      - tbl_AccountLedger
+      - tbl_JournalVoucher
+    support_tables:
+      - tbl_AccountGroup
+      - tbl_JournalVoucherDetail
+      - tbl_PaymentReceived
+      - tbl_PaymentMade
+      - tbl_CreditDebitNote
+      - tbl_Organization
+      - dim_Status
+    trigger_keywords:
+      - account
+      - ledger
+      - journal
+      - voucher
+      - payment received
+      - payment made
+      - credit note
+      - debit note
+      - finance
+      - accounting
+      - debit
+      - credit
+      - balance
+      - opening balance
+      - bank
+      - cash
+    anti_keywords:
+      - attendance
+      - leave
+      - stock
+      - purchase schedule
+      - vehicle
+
+  logistics_transport:
+    description: >
+      Covers vehicle master, driver master, route master, trip sheets,
+      and loading/unloading details for transport management.
+    primary_tables:
+      - tbl_TripSheet
+      - tbl_VehicleMaster
+    support_tables:
+      - tbl_DriverMaster
+      - tbl_RouteMaster
+      - tbl_LoadingDetail
+      - dim_Status
+      - tbl_ProductMaster
+    trigger_keywords:
+      - vehicle
+      - truck
+      - lorry
+      - driver
+      - route
+      - trip
+      - loading
+      - unloading
+      - transportation
+      - logistics
+      - transporter
+      - fleet
+      - trip sheet
+      - distance
+      - kilometer
+    anti_keywords:
+      - invoice
+      - salary
+      - attendance
+      - account
+      - journal
+
+  quality:
+    description: >
+      Covers quality parameters, quality checklists, and test results
+      for product quality assurance.
+    primary_tables:
+      - tbl_QualityChecklist
+    support_tables:
+      - tbl_QualityParameter
+      - tbl_QualityTestResult
+      - tbl_ProductMaster
+      - tbl_ProductGrade
+    trigger_keywords:
+      - quality
+      - checklist
+      - test
+      - inspection
+      - parameter
+      - lab test
+      - quality check
+      - qc
+      - quality control
+      - test result
+      - pass
+      - fail
+    anti_keywords:
+      - invoice
+      - salary
+      - payment
+      - stock
+
+  compliance_tax:
+    description: >
+      Covers GST returns, e-way bills, and TDS deductions for tax compliance.
+    primary_tables:
+      - tbl_GSTReturn
+      - tbl_EwayBill
+      - tbl_TDSDeduction
+    support_tables:
+      - vw_AllInvoices
+      - tbl_Organization
+      - dim_Status
+      - tbl_SaleInvoiceHeader
+    trigger_keywords:
+      - gst
+      - gst return
+      - eway bill
+      - e-way bill
+      - tds
+      - tax deducted
+      - compliance
+      - tax
+      - filing
+      - challan
+      - tax return
+    anti_keywords:
+      - attendance
+      - stock
+      - quality
+      - leave
+      - payroll
+
+# -----------------------------------------------------------------------------
+# DOMAIN CONFLICT RULES
+# When multiple domains match, these rules resolve the conflict.
+# -----------------------------------------------------------------------------
+
+conflict_resolution:
+
+  - rule: "If 'sales' and 'purchase' both match, check for 'invoice' keyword -> prefer sales"
+  - rule: "If 'rates' and 'purchase' both match, look for 'purchase rate' phrase -> prefer rates"
+  - rule: "If 'hr_payroll' and 'finance_accounts' both match, check for 'salary' keyword -> prefer hr_payroll"
+  - rule: "If only master_data keywords match with no transaction keywords -> include both master + the transaction domain that makes sense contextually"

@@ -1,0 +1,1362 @@
+# =============================================================================
+# joins.yaml
+# Defines every valid JOIN path in the system.
+# The retrieval pipeline uses this as a graph — when two tables are selected,
+# it looks up how to connect them here.
+#
+# HOW TO SCALE: Add new join blocks when you add new tables.
+#               Always define joins in BOTH directions for the graph lookup.
+# =============================================================================
+
+version: "1.0"
+last_updated: "2026-07"
+
+# -----------------------------------------------------------------------------
+# SCHEMA: Each join entry contains:
+#   from_table:       left table
+#   to_table:         right table
+#   join_type:        INNER | LEFT | RIGHT (recommended join type for this pair)
+#   on_clause:        exact SQL ON condition
+#   cardinality:      many-to-one | one-to-many | one-to-one
+#   business_meaning: plain English — why you would join these two tables
+#   use_when:         what user question patterns trigger this join
+# -----------------------------------------------------------------------------
+
+joins:
+
+  # ---------------------------------------------------------------------------
+  # INVOICE JOINS
+  # ---------------------------------------------------------------------------
+
+  - id: inv_dealer
+    from_table: tbl_SaleInvoiceHeader
+    to_table: tbl_Organization
+    join_type: LEFT
+    on_clause: "tbl_SaleInvoiceHeader.dealerOrgId = tbl_Organization.idOrganization"
+    cardinality: many-to-one
+    business_meaning: >
+      Links each invoice to the dealer who purchased it.
+      Use when the user asks for dealer names on sales or invoices.
+    use_when:
+      - "sales by dealer"
+      - "invoice for dealer"
+      - "dealer name on invoice"
+      - "which dealer bought"
+      - "dealer wise revenue"
+
+  - id: inv_distributor
+    from_table: tbl_SaleInvoiceHeader
+    to_table: tbl_Organization
+    join_type: LEFT
+    on_clause: "tbl_SaleInvoiceHeader.distributorOrgId = tbl_Organization.idOrganization"
+    cardinality: many-to-one
+    business_meaning: >
+      Links each invoice to the distributor associated with it.
+      Use when the user asks about distributor-level sales.
+    use_when:
+      - "sales by distributor"
+      - "distributor wise invoice"
+      - "which distributor"
+      - "distributor revenue"
+    note: >
+      When joining both dealer and distributor from tbl_SaleInvoiceHeader to tbl_Organization,
+      you must alias the table:
+      JOIN tbl_Organization dealer ON tbl_SaleInvoiceHeader.dealerOrgId = dealer.idOrganization
+      JOIN tbl_Organization dist   ON tbl_SaleInvoiceHeader.distributorOrgId = dist.idOrganization
+
+  - id: inv_consignee
+    from_table: tbl_SaleInvoiceHeader
+    to_table: tbl_Organization
+    join_type: LEFT
+    on_clause: "tbl_SaleInvoiceHeader.consigneeId = tbl_Organization.idOrganization"
+    cardinality: many-to-one
+    business_meaning: >
+      Links each invoice to the consignee organization.
+      Use when the user asks about consignee details on invoices.
+    use_when:
+      - "consignee name"
+      - "invoice consignee"
+      - "ship to party"
+      - "consignee details"
+    note: >
+      When joining dealer, distributor, and consignee from tbl_SaleInvoiceHeader to
+      tbl_Organization, use unique aliases for each:
+      JOIN tbl_Organization dealer     ON tbl_SaleInvoiceHeader.dealerOrgId     = dealer.idOrganization
+      JOIN tbl_Organization dist       ON tbl_SaleInvoiceHeader.distributorOrgId = dist.idOrganization
+      JOIN tbl_Organization consignee  ON tbl_SaleInvoiceHeader.consigneeId     = consignee.idOrganization
+
+  - id: inv_paymentterm
+    from_table: tbl_SaleInvoiceHeader
+    to_table: dim_PaymentTerm
+    join_type: LEFT
+    on_clause: "tbl_SaleInvoiceHeader.paymentTermId = dim_PaymentTerm.idPaymentTerm"
+    cardinality: many-to-one
+    business_meaning: >
+      Resolves the payment terms applied to an invoice.
+      Use when the user asks about payment terms, due dates, or credit periods on invoices.
+    use_when:
+      - "payment terms on invoice"
+      - "invoice due date"
+      - "credit period"
+      - "payment term name"
+
+  - id: inv_detail
+    from_table: tbl_SaleInvoiceHeader
+    to_table: tbl_SaleInvoiceDetail
+    join_type: LEFT
+    on_clause: "tbl_SaleInvoiceHeader.idInvoice = tbl_SaleInvoiceDetail.invoiceId"
+    cardinality: one-to-many
+    business_meaning: >
+      Gets the line items (products, quantities, rates) for each invoice.
+      Use when the user asks for invoice line details, product-wise quantities, or amounts.
+    use_when:
+      - "invoice line items"
+      - "invoice details"
+      - "product wise quantity on invoice"
+      - "what was sold on invoice"
+      - "invoice items"
+
+  - id: detail_product
+    from_table: tbl_SaleInvoiceDetail
+    to_table: tbl_ProductMaster
+    join_type: LEFT
+    on_clause: "tbl_SaleInvoiceDetail.productId = tbl_ProductMaster.idProduct"
+    cardinality: many-to-one
+    business_meaning: >
+      Gets product master details (name, code, category) for each invoice line item.
+      Use when the user asks about product names or codes on invoices.
+    use_when:
+      - "product name on invoice"
+      - "invoice product details"
+      - "what product was sold"
+      - "product code in invoice"
+
+  - id: detail_grade
+    from_table: tbl_SaleInvoiceDetail
+    to_table: tbl_ProductGrade
+    join_type: LEFT
+    on_clause: "tbl_SaleInvoiceDetail.gradeId = tbl_ProductGrade.idGrade"
+    cardinality: many-to-one
+    business_meaning: >
+      Gets the grade details for each invoice line item.
+      Use when the user asks about product grade or quality on invoices.
+    use_when:
+      - "product grade on invoice"
+      - "grade wise sales"
+      - "invoice grade details"
+
+  - id: detail_uom
+    from_table: tbl_SaleInvoiceDetail
+    to_table: dim_UOM
+    join_type: LEFT
+    on_clause: "tbl_SaleInvoiceDetail.uomId = dim_UOM.idUOM"
+    cardinality: many-to-one
+    business_meaning: >
+      Resolves the unit of measure for invoice line items.
+      Use when the user asks about quantities in specific units.
+    use_when:
+      - "unit of measure on invoice"
+      - "UOM details"
+      - "quantity in tons"
+      - "invoice line UOM"
+
+  - id: detail_tax
+    from_table: tbl_SaleInvoiceDetail
+    to_table: dim_TaxRate
+    join_type: LEFT
+    on_clause: "tbl_SaleInvoiceDetail.taxRateId = dim_TaxRate.idTaxRate"
+    cardinality: many-to-one
+    business_meaning: >
+      Gets the tax rate applied to each invoice line item.
+      Use when the user asks about tax amounts, GST rates, or tax breakdowns.
+    use_when:
+      - "tax rate on invoice"
+      - "GST on invoice"
+      - "tax breakdown"
+      - "invoice tax details"
+
+  # ---------------------------------------------------------------------------
+  # ORGANIZATION JOINS
+  # ---------------------------------------------------------------------------
+
+  - id: org_orgtype
+    from_table: tbl_Organization
+    to_table: dim_OrgType
+    join_type: INNER
+    on_clause: "tbl_Organization.orgTypeId = dim_OrgType.idOrgType"
+    cardinality: many-to-one
+    business_meaning: >
+      Resolves the type of an organization (Dealer, Distributor, C&F Agent, Vendor, etc.).
+      Use when filtering or grouping by organization category.
+    use_when:
+      - "list all dealers"
+      - "show all distributors"
+      - "filter by organization type"
+      - "how many dealers"
+      - "organization category"
+      - "type of organization"
+
+  - id: org_city
+    from_table: tbl_Organization
+    to_table: dmn_City
+    join_type: LEFT
+    on_clause: "tbl_Organization.cityId = dmn_City.idCity"
+    cardinality: many-to-one
+    business_meaning: >
+      Gets the city details for an organization.
+      Use when the user asks about organization location or city-wise analysis.
+    use_when:
+      - "organization city"
+      - "city wise dealers"
+      - "dealers in city"
+      - "organization location"
+
+  - id: org_paymentterm
+    from_table: tbl_Organization
+    to_table: dim_PaymentTerm
+    join_type: LEFT
+    on_clause: "tbl_Organization.paymentTermId = dim_PaymentTerm.idPaymentTerm"
+    cardinality: many-to-one
+    business_meaning: >
+      Gets the default payment terms configured for an organization.
+      Use when the user asks about payment terms by organization.
+    use_when:
+      - "dealer payment terms"
+      - "organization payment terms"
+      - "credit terms by organization"
+
+  - id: org_bank
+    from_table: tbl_Organization
+    to_table: tbl_OrgBankDetail
+    join_type: LEFT
+    on_clause: "tbl_Organization.idOrganization = tbl_OrgBankDetail.organizationId"
+    cardinality: one-to-many
+    business_meaning: >
+      Gets bank account details associated with an organization.
+      Use when the user asks about bank details, account numbers, or IFSC codes.
+    use_when:
+      - "organization bank details"
+      - "bank account of dealer"
+      - "dealer bank information"
+      - "IFSC code"
+
+  - id: org_contact
+    from_table: tbl_Organization
+    to_table: tbl_OrgContact
+    join_type: LEFT
+    on_clause: "tbl_Organization.idOrganization = tbl_OrgContact.organizationId"
+    cardinality: one-to-many
+    business_meaning: >
+      Gets contact persons (name, phone, email) for an organization.
+      Use when the user asks for contact information or personnel details.
+    use_when:
+      - "organization contact"
+      - "dealer contact person"
+      - "contact number"
+      - "email of organization"
+
+  - id: org_address
+    from_table: tbl_Organization
+    to_table: tbl_OrgAddress
+    join_type: LEFT
+    on_clause: "tbl_Organization.idOrganization = tbl_OrgAddress.organizationId"
+    cardinality: one-to-many
+    business_meaning: >
+      Gets registered addresses for an organization.
+      Use when the user asks about organization addresses or shipping locations.
+    use_when:
+      - "organization address"
+      - "dealer address"
+      - "shipping address"
+      - "registered address"
+
+  # ---------------------------------------------------------------------------
+  # BOOKING JOINS
+  # ---------------------------------------------------------------------------
+
+  - id: booking_dealer
+    from_table: tbl_Booking
+    to_table: tbl_Organization
+    join_type: LEFT
+    on_clause: "tbl_Booking.dealerOrgId = tbl_Organization.idOrganization"
+    cardinality: many-to-one
+    business_meaning: >
+      Links each booking to the dealer who placed the order.
+      Use when the user asks about bookings by dealer name.
+    use_when:
+      - "bookings by dealer"
+      - "dealer orders"
+      - "which dealer placed the booking"
+      - "pending orders for dealer"
+
+  - id: booking_cnf
+    from_table: tbl_Booking
+    to_table: tbl_Organization
+    join_type: LEFT
+    on_clause: "tbl_Booking.cnFOrgId = tbl_Organization.idOrganization"
+    cardinality: many-to-one
+    business_meaning: >
+      Links each booking to its C&F (Carrying & Forwarding) agent.
+      Use when filtering bookings by C&F agent.
+    use_when:
+      - "bookings through C&F"
+      - "C&F agent bookings"
+      - "carrying agent orders"
+
+  - id: booking_product
+    from_table: tbl_Booking
+    to_table: tbl_ProductMaster
+    join_type: LEFT
+    on_clause: "tbl_Booking.productId = tbl_ProductMaster.idProduct"
+    cardinality: many-to-one
+    business_meaning: >
+      Gets product details for each booking.
+      Use when the user asks about booked products or product-wise bookings.
+    use_when:
+      - "bookings by product"
+      - "product wise orders"
+      - "what product was booked"
+      - "booking product details"
+
+  - id: booking_status
+    from_table: tbl_Booking
+    to_table: dim_Status
+    join_type: LEFT
+    on_clause: "tbl_Booking.statusId = dim_Status.idStatus"
+    cardinality: many-to-one
+    business_meaning: >
+      Resolves the human-readable status name for each booking.
+      Use whenever the user asks about booking status (e.g., Pending, Delivered, Cancelled).
+    use_when:
+      - "booking status"
+      - "delivered bookings"
+      - "cancelled orders"
+      - "pending bookings"
+      - "bookings by status"
+
+  - id: booking_delivery
+    from_table: tbl_Booking
+    to_table: tbl_BookingDelivery
+    join_type: LEFT
+    on_clause: "tbl_Booking.idBooking = tbl_BookingDelivery.bookingId"
+    cardinality: one-to-many
+    business_meaning: >
+      Gets delivery records associated with a booking.
+      Use when the user asks about delivery details, delivery dates, or dispatch information.
+    use_when:
+      - "booking delivery details"
+      - "delivery record"
+      - "dispatch information"
+      - "when was booking delivered"
+
+  # ---------------------------------------------------------------------------
+  # PURCHASE JOINS
+  # ---------------------------------------------------------------------------
+
+  - id: enquiry_product
+    from_table: tbl_PurchaseEnquiry
+    to_table: tbl_ProductMaster
+    join_type: LEFT
+    on_clause: "tbl_PurchaseEnquiry.productId = tbl_ProductMaster.idProduct"
+    cardinality: many-to-one
+    business_meaning: >
+      Gets product master details for each purchase enquiry.
+      Use when the user asks about products in purchase enquiries.
+    use_when:
+      - "enquiry product details"
+      - "product in purchase enquiry"
+      - "what material enquired"
+
+  - id: enquiry_class
+    from_table: tbl_PurchaseEnquiry
+    to_table: tbl_ProductClass
+    join_type: LEFT
+    on_clause: "tbl_PurchaseEnquiry.prodClassId = tbl_ProductClass.idProdClass"
+    cardinality: many-to-one
+    business_meaning: >
+      Resolves the product class or material type for each purchase enquiry.
+      Use when the user asks about enquiries by product category.
+    use_when:
+      - "enquiries by product class"
+      - "material type enquiry"
+      - "product class enquiry"
+
+  - id: enquiry_vendor
+    from_table: tbl_PurchaseEnquiry
+    to_table: tbl_Organization
+    join_type: LEFT
+    on_clause: "tbl_PurchaseEnquiry.vendorId = tbl_Organization.idOrganization"
+    cardinality: many-to-one
+    business_meaning: >
+      Links each purchase enquiry to the vendor who submitted it.
+      Use when the user asks about vendor-specific enquiries.
+    use_when:
+      - "enquiries by vendor"
+      - "vendor quotations"
+      - "supplier enquiry"
+
+  - id: enquiry_status
+    from_table: tbl_PurchaseEnquiry
+    to_table: dim_Status
+    join_type: LEFT
+    on_clause: "tbl_PurchaseEnquiry.statusId = dim_Status.idStatus"
+    cardinality: many-to-one
+    business_meaning: >
+      Resolves the status of each purchase enquiry.
+      Use when the user asks about enquiry status or pending enquiries.
+    use_when:
+      - "enquiry status"
+      - "pending enquiries"
+      - "approved enquiries"
+      - "enquiry by status"
+
+  - id: schedule_enquiry
+    from_table: tbl_PurchaseSchedule
+    to_table: tbl_PurchaseEnquiry
+    join_type: LEFT
+    on_clause: "tbl_PurchaseSchedule.purchaseEnquiryId = tbl_PurchaseEnquiry.idEnquiry"
+    cardinality: many-to-one
+    business_meaning: >
+      Links a purchase schedule back to the original purchase enquiry it was raised for.
+      Use when the user asks about schedules for a specific product class or enquiry.
+    use_when:
+      - "schedules for a product"
+      - "purchase enquiry schedules"
+      - "schedule by material type"
+      - "schedule enquiry details"
+
+  - id: schedule_product
+    from_table: tbl_PurchaseSchedule
+    to_table: tbl_ProductMaster
+    join_type: LEFT
+    on_clause: "tbl_PurchaseSchedule.productId = tbl_ProductMaster.idProduct"
+    cardinality: many-to-one
+    business_meaning: >
+      Gets product details for each purchase schedule.
+      Use when the user asks about products in purchase schedules.
+    use_when:
+      - "schedule product details"
+      - "product in purchase schedule"
+      - "material scheduled"
+
+  - id: schedule_vendor
+    from_table: tbl_PurchaseSchedule
+    to_table: tbl_Organization
+    join_type: LEFT
+    on_clause: "tbl_PurchaseSchedule.vendorId = tbl_Organization.idOrganization"
+    cardinality: many-to-one
+    business_meaning: >
+      Links each purchase schedule to the vendor.
+      Use when the user asks about vendor-wise schedules.
+    use_when:
+      - "schedules by vendor"
+      - "vendor purchase schedule"
+      - "supplier trip"
+
+  - id: schedule_status
+    from_table: tbl_PurchaseSchedule
+    to_table: dim_Status
+    join_type: LEFT
+    on_clause: "tbl_PurchaseSchedule.statusId = dim_Status.idStatus"
+    cardinality: many-to-one
+    business_meaning: >
+      Resolves the human-readable status for each purchase schedule.
+      Use when the user asks about schedule status.
+    use_when:
+      - "purchase schedule status"
+      - "completed schedules"
+      - "pending purchase trips"
+      - "schedule by status"
+
+  - id: schedule_root
+    from_table: tbl_PurchaseSchedule
+    to_table: tbl_PurchaseSchedule
+    join_type: LEFT
+    on_clause: "tbl_PurchaseSchedule.rootScheduleId = tbl_PurchaseSchedule.idSchedule"
+    cardinality: many-to-one
+    business_meaning: >
+      Links a sub-schedule or split schedule to its root parent schedule.
+      Use when the user asks about schedule splits, revisions, or original schedules.
+    use_when:
+      - "original schedule"
+      - "root schedule"
+      - "parent schedule"
+      - "schedule split"
+
+  - id: po_vendor
+    from_table: tbl_PurchaseOrder
+    to_table: tbl_Organization
+    join_type: LEFT
+    on_clause: "tbl_PurchaseOrder.vendorId = tbl_Organization.idOrganization"
+    cardinality: many-to-one
+    business_meaning: >
+      Links each purchase order to the vendor.
+      Use when the user asks about vendor-wise purchase orders.
+    use_when:
+      - "purchase orders by vendor"
+      - "PO vendor details"
+      - "supplier orders"
+
+  - id: po_status
+    from_table: tbl_PurchaseOrder
+    to_table: dim_Status
+    join_type: LEFT
+    on_clause: "tbl_PurchaseOrder.statusId = dim_Status.idStatus"
+    cardinality: many-to-one
+    business_meaning: >
+      Resolves the status of each purchase order.
+      Use when the user asks about PO status.
+    use_when:
+      - "purchase order status"
+      - "PO status"
+      - "pending purchase orders"
+      - "approved POs"
+
+  - id: pi_po
+    from_table: tbl_PurchaseInvoice
+    to_table: tbl_PurchaseOrder
+    join_type: LEFT
+    on_clause: "tbl_PurchaseInvoice.purchaseOrderId = tbl_PurchaseOrder.idPurchaseOrder"
+    cardinality: many-to-one
+    business_meaning: >
+      Links a purchase invoice back to its originating purchase order.
+      Use when the user asks about purchase invoices by PO or PO-wise billing.
+    use_when:
+      - "purchase invoice by PO"
+      - "PO wise billing"
+      - "invoice against purchase order"
+
+  - id: pi_vendor
+    from_table: tbl_PurchaseInvoice
+    to_table: tbl_Organization
+    join_type: LEFT
+    on_clause: "tbl_PurchaseInvoice.vendorId = tbl_Organization.idOrganization"
+    cardinality: many-to-one
+    business_meaning: >
+      Links each purchase invoice to the vendor.
+      Use when the user asks about vendor-wise purchase invoices.
+    use_when:
+      - "purchase invoices by vendor"
+      - "vendor billing"
+      - "supplier invoices"
+
+  - id: pi_status
+    from_table: tbl_PurchaseInvoice
+    to_table: dim_Status
+    join_type: LEFT
+    on_clause: "tbl_PurchaseInvoice.statusId = dim_Status.idStatus"
+    cardinality: many-to-one
+    business_meaning: >
+      Resolves the status of each purchase invoice.
+      Use when the user asks about purchase invoice status.
+    use_when:
+      - "purchase invoice status"
+      - "pending purchase invoices"
+      - "approved purchase invoices"
+
+  # ---------------------------------------------------------------------------
+  # PRODUCT JOINS
+  # ---------------------------------------------------------------------------
+
+  - id: product_category
+    from_table: tbl_ProductMaster
+    to_table: tbl_ProductCategory
+    join_type: LEFT
+    on_clause: "tbl_ProductMaster.categoryId = tbl_ProductCategory.idCategory"
+    cardinality: many-to-one
+    business_meaning: >
+      Resolves the product category for each product.
+      Use when the user asks about category-wise products or grouping by category.
+    use_when:
+      - "product category"
+      - "category wise products"
+      - "product group"
+      - "category name"
+
+  - id: product_class
+    from_table: tbl_ProductMaster
+    to_table: tbl_ProductClass
+    join_type: LEFT
+    on_clause: "tbl_ProductMaster.classId = tbl_ProductClass.idProdClass"
+    cardinality: many-to-one
+    business_meaning: >
+      Resolves the product class or material type for each product.
+      Use when the user asks about product classification or material group.
+    use_when:
+      - "product class"
+      - "material type"
+      - "product classification"
+      - "class wise products"
+
+  - id: product_uom
+    from_table: tbl_ProductMaster
+    to_table: dim_UOM
+    join_type: LEFT
+    on_clause: "tbl_ProductMaster.baseUOMId = dim_UOM.idUOM"
+    cardinality: many-to-one
+    business_meaning: >
+      Gets the base unit of measure for each product.
+      Use when the user asks about product units or base UOM.
+    use_when:
+      - "product UOM"
+      - "base unit of measure"
+      - "product unit"
+      - "default UOM"
+
+  - id: product_grade
+    from_table: tbl_ProductMaster
+    to_table: tbl_ProductGrade
+    join_type: LEFT
+    on_clause: "tbl_ProductMaster.idProduct = tbl_ProductGrade.productId"
+    cardinality: one-to-many
+    business_meaning: >
+      Gets the available grades for each product.
+      Use when the user asks about product grades or quality variants.
+    use_when:
+      - "product grades"
+      - "grade variants"
+      - "quality options for product"
+
+  - id: category_parent
+    from_table: tbl_ProductCategory
+    to_table: tbl_ProductCategory
+    join_type: LEFT
+    on_clause: "tbl_ProductCategory.parentId = tbl_ProductCategory.idCategory"
+    cardinality: many-to-one
+    business_meaning: >
+      Links a sub-category to its parent category for hierarchical category navigation.
+      Use when the user asks about category hierarchy or parent categories.
+    use_when:
+      - "parent category"
+      - "category hierarchy"
+      - "sub category of"
+      - "top level category"
+
+  # ---------------------------------------------------------------------------
+  # RATE JOINS
+  # ---------------------------------------------------------------------------
+
+  - id: salerate_product
+    from_table: tbl_GlobalSaleRate
+    to_table: tbl_ProductMaster
+    join_type: LEFT
+    on_clause: "tbl_GlobalSaleRate.productId = tbl_ProductMaster.idProduct"
+    cardinality: many-to-one
+    business_meaning: >
+      Gets product details for global sale rates.
+      Use when the user asks about sale rates by product.
+    use_when:
+      - "sale rate by product"
+      - "product sale rate"
+      - "selling rate"
+      - "rate list by product"
+
+  - id: purchserate_product
+    from_table: tbl_GlobalPurchaseRate
+    to_table: tbl_ProductMaster
+    join_type: LEFT
+    on_clause: "tbl_GlobalPurchaseRate.productId = tbl_ProductMaster.idProduct"
+    cardinality: many-to-one
+    business_meaning: >
+      Gets product details for global purchase rates.
+      Use when the user asks about purchase rates by product.
+    use_when:
+      - "purchase rate by product"
+      - "product purchase rate"
+      - "buying rate"
+      - "procurement rate"
+
+  - id: rateband_globalrate
+    from_table: tbl_RateBand
+    to_table: tbl_GlobalPurchaseRate
+    join_type: INNER
+    on_clause: "tbl_RateBand.globalPurchaseRateId = tbl_GlobalPurchaseRate.idGlobalPurchaseRate"
+    cardinality: many-to-one
+    business_meaning: >
+      Links rate band declarations to their parent global purchase rate.
+      Use when showing full rate band details including the base rate.
+    use_when:
+      - "rate band with rate"
+      - "purchase rate slab details"
+      - "rate bands by product"
+      - "tiered rates"
+
+  # ---------------------------------------------------------------------------
+  # INVENTORY JOINS
+  # ---------------------------------------------------------------------------
+
+  - id: stock_warehouse
+    from_table: tbl_StockLedger
+    to_table: tbl_Warehouse
+    join_type: LEFT
+    on_clause: "tbl_StockLedger.warehouseId = tbl_Warehouse.idWarehouse"
+    cardinality: many-to-one
+    business_meaning: >
+      Gets warehouse details for each stock ledger entry.
+      Use when the user asks about stock by warehouse or location-wise inventory.
+    use_when:
+      - "stock by warehouse"
+      - "warehouse wise stock"
+      - "location inventory"
+      - "stock at warehouse"
+
+  - id: stock_product
+    from_table: tbl_StockLedger
+    to_table: tbl_ProductMaster
+    join_type: LEFT
+    on_clause: "tbl_StockLedger.productId = tbl_ProductMaster.idProduct"
+    cardinality: many-to-one
+    business_meaning: >
+      Gets product details for each stock ledger entry.
+      Use when the user asks about stock levels by product.
+    use_when:
+      - "stock by product"
+      - "product inventory"
+      - "current stock of product"
+      - "stock balance"
+
+  - id: transfer_from
+    from_table: tbl_StockTransfer
+    to_table: tbl_Warehouse
+    join_type: LEFT
+    on_clause: "tbl_StockTransfer.fromWarehouseId = tbl_Warehouse.idWarehouse"
+    cardinality: many-to-one
+    business_meaning: >
+      Gets the source warehouse details for stock transfers.
+      Use when the user asks about stock transfers from a specific warehouse.
+    use_when:
+      - "transferred from warehouse"
+      - "source warehouse"
+      - "stock transfer origin"
+
+  - id: transfer_to
+    from_table: tbl_StockTransfer
+    to_table: tbl_Warehouse
+    join_type: LEFT
+    on_clause: "tbl_StockTransfer.toWarehouseId = tbl_Warehouse.idWarehouse"
+    cardinality: many-to-one
+    business_meaning: >
+      Gets the destination warehouse details for stock transfers.
+      Use when the user asks about stock transfers to a specific warehouse.
+    use_when:
+      - "transferred to warehouse"
+      - "destination warehouse"
+      - "stock transfer target"
+
+  - id: transfer_status
+    from_table: tbl_StockTransfer
+    to_table: dim_Status
+    join_type: LEFT
+    on_clause: "tbl_StockTransfer.statusId = dim_Status.idStatus"
+    cardinality: many-to-one
+    business_meaning: >
+      Resolves the status of each stock transfer.
+      Use when the user asks about stock transfer status.
+    use_when:
+      - "stock transfer status"
+      - "pending transfers"
+      - "completed transfers"
+
+  # ---------------------------------------------------------------------------
+  # HR JOINS
+  # ---------------------------------------------------------------------------
+
+  - id: emp_department
+    from_table: tbl_Employee
+    to_table: tbl_Department
+    join_type: LEFT
+    on_clause: "tbl_Employee.departmentId = tbl_Department.idDepartment"
+    cardinality: many-to-one
+    business_meaning: >
+      Gets the department details for each employee.
+      Use when the user asks about department-wise employees or employee departments.
+    use_when:
+      - "employee department"
+      - "department wise employees"
+      - "which department"
+      - "employees by department"
+
+  - id: emp_designation
+    from_table: tbl_Employee
+    to_table: tbl_Designation
+    join_type: LEFT
+    on_clause: "tbl_Employee.designationId = tbl_Designation.idDesignation"
+    cardinality: many-to-one
+    business_meaning: >
+      Gets the designation details for each employee.
+      Use when the user asks about employee roles or designations.
+    use_when:
+      - "employee designation"
+      - "designation wise"
+      - "employee role"
+      - "job title"
+
+  - id: emp_reporting
+    from_table: tbl_Employee
+    to_table: tbl_Employee
+    join_type: LEFT
+    on_clause: "tbl_Employee.reportingToId = tbl_Employee.idEmployee"
+    cardinality: many-to-one
+    business_meaning: >
+      Links an employee to their reporting manager.
+      Use when the user asks about reporting hierarchy or manager details.
+    use_when:
+      - "reporting manager"
+      - "employee reports to"
+      - "manager of employee"
+      - "hierarchy"
+
+  - id: emp_city
+    from_table: tbl_Employee
+    to_table: dmn_City
+    join_type: LEFT
+    on_clause: "tbl_Employee.cityId = dmn_City.idCity"
+    cardinality: many-to-one
+    business_meaning: >
+      Gets the city details for each employee's location.
+      Use when the user asks about employees by city or location.
+    use_when:
+      - "employee city"
+      - "employees in city"
+      - "location wise employees"
+
+  - id: attendance_emp
+    from_table: tbl_Attendance
+    to_table: tbl_Employee
+    join_type: INNER
+    on_clause: "tbl_Attendance.employeeId = tbl_Employee.idEmployee"
+    cardinality: many-to-one
+    business_meaning: >
+      Links attendance records to employees.
+      Use when the user asks about attendance by employee or employee-wise attendance.
+    use_when:
+      - "attendance by employee"
+      - "employee attendance"
+      - "who was present"
+      - "attendance report"
+
+  - id: leave_emp
+    from_table: tbl_LeaveApplication
+    to_table: tbl_Employee
+    join_type: INNER
+    on_clause: "tbl_LeaveApplication.employeeId = tbl_Employee.idEmployee"
+    cardinality: many-to-one
+    business_meaning: >
+      Links leave applications to employees.
+      Use when the user asks about leave by employee or employee-wise leave records.
+    use_when:
+      - "leave by employee"
+      - "employee leave"
+      - "who is on leave"
+      - "leave applications"
+
+  - id: leave_type
+    from_table: tbl_LeaveApplication
+    to_table: tbl_LeaveType
+    join_type: LEFT
+    on_clause: "tbl_LeaveApplication.leaveTypeId = tbl_LeaveType.idLeaveType"
+    cardinality: many-to-one
+    business_meaning: >
+      Resolves the leave type name for each leave application.
+      Use when the user asks about leave types (Sick, Casual, Annual, etc.).
+    use_when:
+      - "leave type"
+      - "sick leave"
+      - "casual leave"
+      - "type of leave"
+
+  - id: leave_status
+    from_table: tbl_LeaveApplication
+    to_table: dim_Status
+    join_type: LEFT
+    on_clause: "tbl_LeaveApplication.statusId = dim_Status.idStatus"
+    cardinality: many-to-one
+    business_meaning: >
+      Resolves the approval status of each leave application.
+      Use when the user asks about leave status (Approved, Pending, Rejected).
+    use_when:
+      - "leave status"
+      - "approved leave"
+      - "pending leave applications"
+      - "rejected leave"
+
+  - id: payroll_emp
+    from_table: tbl_PayrollHeader
+    to_table: tbl_Employee
+    join_type: INNER
+    on_clause: "tbl_PayrollHeader.employeeId = tbl_Employee.idEmployee"
+    cardinality: many-to-one
+    business_meaning: >
+      Links payroll records to employees.
+      Use when the user asks about salary, payroll by employee, or employee-wise pay.
+    use_when:
+      - "payroll by employee"
+      - "employee salary"
+      - "payroll details"
+      - "salary details"
+
+  - id: payroll_detail
+    from_table: tbl_PayrollHeader
+    to_table: tbl_PayrollDetail
+    join_type: LEFT
+    on_clause: "tbl_PayrollHeader.idPayroll = tbl_PayrollDetail.payrollId"
+    cardinality: one-to-many
+    business_meaning: >
+      Gets the line items (earnings and deductions) for each payroll header.
+      Use when the user asks about salary components, earnings, or deductions breakdown.
+    use_when:
+      - "payroll components"
+      - "salary breakdown"
+      - "earnings and deductions"
+      - "payroll detail lines"
+
+  # ---------------------------------------------------------------------------
+  # FINANCE JOINS
+  # ---------------------------------------------------------------------------
+
+  - id: ledger_group
+    from_table: tbl_AccountLedger
+    to_table: tbl_AccountGroup
+    join_type: INNER
+    on_clause: "tbl_AccountLedger.groupId = tbl_AccountGroup.idGroup"
+    cardinality: many-to-one
+    business_meaning: >
+      Resolves the account group for each ledger (e.g., Sundry Debtors, Bank Accounts).
+      Use when the user asks about ledger groupings or group-wise balances.
+    use_when:
+      - "ledger group"
+      - "account group"
+      - "group wise ledger"
+      - "ledger category"
+
+  - id: ledger_org
+    from_table: tbl_AccountLedger
+    to_table: tbl_Organization
+    join_type: LEFT
+    on_clause: "tbl_AccountLedger.organizationId = tbl_Organization.idOrganization"
+    cardinality: many-to-one
+    business_meaning: >
+      Links an account ledger to its associated organization.
+      Use when the user asks about organization-wise ledger balances or accounts.
+    use_when:
+      - "ledger by organization"
+      - "organization account"
+      - "dealer ledger"
+      - "party balance"
+
+  - id: jv_detail
+    from_table: tbl_JournalVoucher
+    to_table: tbl_JournalVoucherDetail
+    join_type: LEFT
+    on_clause: "tbl_JournalVoucher.idVoucher = tbl_JournalVoucherDetail.voucherId"
+    cardinality: one-to-many
+    business_meaning: >
+      Gets the debit/credit lines for each journal voucher.
+      Use when the user asks about journal entry details or voucher lines.
+    use_when:
+      - "journal voucher details"
+      - "voucher lines"
+      - "journal entry breakdown"
+      - "JV details"
+
+  - id: jv_ledger
+    from_table: tbl_JournalVoucherDetail
+    to_table: tbl_AccountLedger
+    join_type: LEFT
+    on_clause: "tbl_JournalVoucherDetail.ledgerId = tbl_AccountLedger.idLedger"
+    cardinality: many-to-one
+    business_meaning: >
+      Gets the ledger details for each journal voucher line.
+      Use when the user asks about which ledgers are affected in a journal entry.
+    use_when:
+      - "journal voucher ledger"
+      - "ledger in JV"
+      - "account affected in voucher"
+
+  - id: paymentrec_org
+    from_table: tbl_PaymentReceived
+    to_table: tbl_Organization
+    join_type: LEFT
+    on_clause: "tbl_PaymentReceived.organizationId = tbl_Organization.idOrganization"
+    cardinality: many-to-one
+    business_meaning: >
+      Links payment received records to the paying organization.
+      Use when the user asks about payments received from a specific party.
+    use_when:
+      - "payment received from"
+      - "receipt from dealer"
+      - "payment collection by party"
+      - "who paid"
+
+  - id: paymentmade_org
+    from_table: tbl_PaymentMade
+    to_table: tbl_Organization
+    join_type: LEFT
+    on_clause: "tbl_PaymentMade.vendorId = tbl_Organization.idOrganization"
+    cardinality: many-to-one
+    business_meaning: >
+      Links payment made records to the vendor organization.
+      Use when the user asks about payments made to vendors.
+    use_when:
+      - "payment made to"
+      - "vendor payment"
+      - "payment to supplier"
+      - "who was paid"
+
+  - id: cdn_invoice
+    from_table: tbl_CreditDebitNote
+    to_table: tbl_SaleInvoiceHeader
+    join_type: LEFT
+    on_clause: "tbl_CreditDebitNote.invoiceId = tbl_SaleInvoiceHeader.idInvoice"
+    cardinality: many-to-one
+    business_meaning: >
+      Links credit/debit notes to their original sales invoice.
+      Use when the user asks about credit notes against invoices.
+    use_when:
+      - "credit note against invoice"
+      - "debit note invoice"
+      - "CDN reference invoice"
+      - "invoice adjustments"
+
+  # ---------------------------------------------------------------------------
+  # LOGISTICS JOINS
+  # ---------------------------------------------------------------------------
+
+  - id: trip_vehicle
+    from_table: tbl_TripSheet
+    to_table: tbl_VehicleMaster
+    join_type: LEFT
+    on_clause: "tbl_TripSheet.vehicleId = tbl_VehicleMaster.idVehicle"
+    cardinality: many-to-one
+    business_meaning: >
+      Gets vehicle details for each trip sheet.
+      Use when the user asks about trip-wise vehicle or vehicle-wise trips.
+    use_when:
+      - "trip vehicle details"
+      - "vehicle used in trip"
+      - "vehicle wise trips"
+      - "truck number"
+
+  - id: trip_driver
+    from_table: tbl_TripSheet
+    to_table: tbl_DriverMaster
+    join_type: LEFT
+    on_clause: "tbl_TripSheet.driverId = tbl_DriverMaster.idDriver"
+    cardinality: many-to-one
+    business_meaning: >
+      Gets driver details for each trip sheet.
+      Use when the user asks about trip-wise driver or driver assignments.
+    use_when:
+      - "trip driver details"
+      - "driver assigned"
+      - "driver wise trips"
+      - "who drove"
+
+  - id: trip_route
+    from_table: tbl_TripSheet
+    to_table: tbl_RouteMaster
+    join_type: LEFT
+    on_clause: "tbl_TripSheet.routeId = tbl_RouteMaster.idRoute"
+    cardinality: many-to-one
+    business_meaning: >
+      Gets route details for each trip sheet.
+      Use when the user asks about trip routes or route-wise trips.
+    use_when:
+      - "trip route details"
+      - "route wise trips"
+      - "trip destination"
+      - "route name"
+
+  - id: loading_trip
+    from_table: tbl_LoadingDetail
+    to_table: tbl_TripSheet
+    join_type: INNER
+    on_clause: "tbl_LoadingDetail.tripId = tbl_TripSheet.idTrip"
+    cardinality: many-to-one
+    business_meaning: >
+      Links loading details to their trip sheet.
+      Use when the user asks about loading records for a specific trip.
+    use_when:
+      - "loading trip details"
+      - "trip loading records"
+      - "what was loaded on trip"
+
+  - id: loading_invoice
+    from_table: tbl_LoadingDetail
+    to_table: tbl_SaleInvoiceHeader
+    join_type: LEFT
+    on_clause: "tbl_LoadingDetail.invoiceId = tbl_SaleInvoiceHeader.idInvoice"
+    cardinality: many-to-one
+    business_meaning: >
+      Links loading details to the sales invoice being loaded.
+      Use when the user asks about which invoices were loaded on a trip.
+    use_when:
+      - "loading invoice details"
+      - "invoice loaded on trip"
+      - "loading sale invoice"
+
+  - id: loading_schedule
+    from_table: tbl_LoadingDetail
+    to_table: tbl_PurchaseSchedule
+    join_type: LEFT
+    on_clause: "tbl_LoadingDetail.scheduleId = tbl_PurchaseSchedule.idSchedule"
+    cardinality: many-to-one
+    business_meaning: >
+      Links loading details to the purchase schedule being loaded.
+      Use when the user asks about which purchase schedules were loaded on a trip.
+    use_when:
+      - "loading schedule details"
+      - "schedule loaded on trip"
+      - "loading purchase schedule"
+
+  # ---------------------------------------------------------------------------
+  # QUALITY JOINS
+  # ---------------------------------------------------------------------------
+
+  - id: qc_product
+    from_table: tbl_QualityChecklist
+    to_table: tbl_ProductMaster
+    join_type: LEFT
+    on_clause: "tbl_QualityChecklist.productId = tbl_ProductMaster.idProduct"
+    cardinality: many-to-one
+    business_meaning: >
+      Gets product details for each quality checklist.
+      Use when the user asks about quality checks by product.
+    use_when:
+      - "quality checklist product"
+      - "product quality check"
+      - "QC by product"
+
+  - id: qc_invoice
+    from_table: tbl_QualityChecklist
+    to_table: tbl_SaleInvoiceHeader
+    join_type: LEFT
+    on_clause: "tbl_QualityChecklist.invoiceId = tbl_SaleInvoiceHeader.idInvoice"
+    cardinality: many-to-one
+    business_meaning: >
+      Links quality checklists to their associated sales invoice.
+      Use when the user asks about quality checks for a specific invoice.
+    use_when:
+      - "quality check for invoice"
+      - "invoice QC"
+      - "quality inspection invoice"
+
+  - id: qc_schedule
+    from_table: tbl_QualityChecklist
+    to_table: tbl_PurchaseSchedule
+    join_type: LEFT
+    on_clause: "tbl_QualityChecklist.scheduleId = tbl_PurchaseSchedule.idSchedule"
+    cardinality: many-to-one
+    business_meaning: >
+      Links quality checklists to their associated purchase schedule.
+      Use when the user asks about quality checks for a purchase schedule.
+    use_when:
+      - "quality check for schedule"
+      - "schedule QC"
+      - "purchase quality inspection"
+
+  - id: test_checklist
+    from_table: tbl_QualityTestResult
+    to_table: tbl_QualityChecklist
+    join_type: INNER
+    on_clause: "tbl_QualityTestResult.checklistId = tbl_QualityChecklist.idChecklist"
+    cardinality: many-to-one
+    business_meaning: >
+      Links quality test results to their parent checklist.
+      Use when the user asks about test results for a specific checklist.
+    use_when:
+      - "test results of checklist"
+      - "checklist test results"
+      - "QC test values"
+
+  - id: test_parameter
+    from_table: tbl_QualityTestResult
+    to_table: tbl_QualityParameter
+    join_type: LEFT
+    on_clause: "tbl_QualityTestResult.parameterId = tbl_QualityParameter.idParameter"
+    cardinality: many-to-one
+    business_meaning: >
+      Gets the parameter name and specifications for each quality test result.
+      Use when the user asks about which parameters were tested.
+    use_when:
+      - "test parameter details"
+      - "parameter tested"
+      - "quality parameter name"
+
+  # ---------------------------------------------------------------------------
+  # COMPLIANCE JOINS
+  # ---------------------------------------------------------------------------
+
+  - id: eway_invoice
+    from_table: tbl_EwayBill
+    to_table: tbl_SaleInvoiceHeader
+    join_type: LEFT
+    on_clause: "tbl_EwayBill.invoiceId = tbl_SaleInvoiceHeader.idInvoice"
+    cardinality: many-to-one
+    business_meaning: >
+      Links e-way bills to their associated sales invoice.
+      Use when the user asks about e-way bills for invoices.
+    use_when:
+      - "e-way bill for invoice"
+      - "invoice eway bill"
+      - "eway bill details"
+
+  - id: eway_schedule
+    from_table: tbl_EwayBill
+    to_table: tbl_PurchaseSchedule
+    join_type: LEFT
+    on_clause: "tbl_EwayBill.scheduleId = tbl_PurchaseSchedule.idSchedule"
+    cardinality: many-to-one
+    business_meaning: >
+      Links e-way bills to their associated purchase schedule.
+      Use when the user asks about e-way bills for purchase schedules.
+    use_when:
+      - "e-way bill for schedule"
+      - "schedule eway bill"
+      - "purchase eway"
+
+  - id: tds_invoice
+    from_table: tbl_TDSDeduction
+    to_table: tbl_SaleInvoiceHeader
+    join_type: LEFT
+    on_clause: "tbl_TDSDeduction.invoiceId = tbl_SaleInvoiceHeader.idInvoice"
+    cardinality: many-to-one
+    business_meaning: >
+      Links TDS deductions to their associated sales invoice.
+      Use when the user asks about TDS deducted on specific invoices.
+    use_when:
+      - "TDS on invoice"
+      - "invoice TDS deduction"
+      - "tax deducted at source on invoice"
+
+  - id: tds_org
+    from_table: tbl_TDSDeduction
+    to_table: tbl_Organization
+    join_type: LEFT
+    on_clause: "tbl_TDSDeduction.organizationId = tbl_Organization.idOrganization"
+    cardinality: many-to-one
+    business_meaning: >
+      Links TDS deductions to the organization (deductee).
+      Use when the user asks about TDS by organization.
+    use_when:
+      - "TDS by organization"
+      - "organization TDS"
+      - "party wise TDS"
+      - "TDS deducted for party"
+
+  # ---------------------------------------------------------------------------
+  # SYSTEM JOINS
+  # ---------------------------------------------------------------------------
+
+  - id: user_employee
+    from_table: tbl_UserMaster
+    to_table: tbl_Employee
+    join_type: LEFT
+    on_clause: "tbl_UserMaster.employeeId = tbl_Employee.idEmployee"
+    cardinality: many-to-one
+    business_meaning: >
+      Links system user accounts to their employee records.
+      Use when the user asks about user details or employee login information.
+    use_when:
+      - "user employee details"
+      - "employee login"
+      - "system user"
+      - "user account"
+
+  - id: audit_user
+    from_table: tbl_AuditLog
+    to_table: tbl_UserMaster
+    join_type: LEFT
+    on_clause: "tbl_AuditLog.performedBy = tbl_UserMaster.idUser"
+    cardinality: many-to-one
+    business_meaning: >
+      Links audit log entries to the user who performed the action.
+      Use when the user asks about who performed a specific action or audit trail.
+    use_when:
+      - "audit trail user"
+      - "who performed action"
+      - "audit log details"
+      - "user activity log"
+
+
+# -----------------------------------------------------------------------------
+# MULTI-HOP JOIN PATHS
+# Pre-defined paths for common 3+ table joins so the system doesn't have to
+# compute them on the fly.
+# -----------------------------------------------------------------------------
+
+multi_hop_paths:
+
+  - id: invoice_full_details
+    description: "Full invoice details with dealer organization type"
+    path:
+      - tbl_SaleInvoiceHeader
+      - tbl_Organization
+        # via dealerOrgId
+      - dim_OrgType
+        # via OrgTypeId
+    sql_template: >
+      FROM tbl_SaleInvoiceHeader inv
+      LEFT JOIN tbl_Organization org ON inv.dealerOrgId = org.idOrganization
+      INNER JOIN dim_OrgType ot ON org.orgTypeId = ot.idOrgType
+
+  - id: invoice_with_line_items
+    description: "Invoice with line items and product details"
+    path:
+      - tbl_SaleInvoiceHeader
+      - tbl_SaleInvoiceDetail
+        # via idInvoice = invoiceId
+      - tbl_ProductMaster
+        # via productId = idProduct
+    sql_template: >
+      FROM tbl_SaleInvoiceHeader inv
+      LEFT JOIN tbl_SaleInvoiceDetail det ON inv.idInvoice = det.invoiceId
+      LEFT JOIN tbl_ProductMaster prod ON det.productId = prod.idProduct
+
+  - id: booking_status_name
+    description: "Get readable status for bookings"
+    path:
+      - tbl_Booking
+      - dim_Status
+    sql_template: >
+      FROM tbl_Booking b
+      LEFT JOIN dim_Status s ON b.statusId = s.idStatus
+
+  - id: schedule_to_product_class
+    description: "Get product class for a purchase schedule via its enquiry"
+    path:
+      - tbl_PurchaseSchedule
+      - tbl_PurchaseEnquiry
+        # via purchaseEnquiryId = idEnquiry
+      - tbl_ProductClass
+        # via prodClassId = idProdClass
+    sql_template: >
+      FROM tbl_PurchaseSchedule ps
+      LEFT JOIN tbl_PurchaseEnquiry pe ON ps.purchaseEnquiryId = pe.idEnquiry
+      LEFT JOIN tbl_ProductClass pc ON pe.prodClassId = pc.idProdClass
+
+  - id: employee_full_details
+    description: "Employee details with department and designation"
+    path:
+      - tbl_Employee
+      - tbl_Department
+        # via departmentId = idDepartment
+      - tbl_Designation
+        # via designationId = idDesignation
+    sql_template: >
+      FROM tbl_Employee emp
+      LEFT JOIN tbl_Department dep ON emp.departmentId = dep.idDepartment
+      LEFT JOIN tbl_Designation des ON emp.designationId = des.idDesignation
+
+  - id: stock_ledger_with_product
+    description: "Stock ledger with warehouse and product details"
+    path:
+      - tbl_StockLedger
+      - tbl_Warehouse
+        # via warehouseId = idWarehouse
+      - tbl_ProductMaster
+        # via productId = idProduct
+    sql_template: >
+      FROM tbl_StockLedger sl
+      LEFT JOIN tbl_Warehouse wh ON sl.warehouseId = wh.idWarehouse
+      LEFT JOIN tbl_ProductMaster prod ON sl.productId = prod.idProduct
