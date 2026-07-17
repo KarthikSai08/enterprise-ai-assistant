@@ -1,28 +1,36 @@
-"""Application-wide constants and path resolution."""
-
 from pathlib import Path
 
-# ── Score thresholds ─────────────────────────────────────────────────
+BASE_DIR = Path(__file__).parent.parent.parent
+KNOWLEDGE_BASE_DIR = BASE_DIR / "knowledge_base"
+TABLES_DIR = KNOWLEDGE_BASE_DIR / "tables"
+COLUMNS_DIR = KNOWLEDGE_BASE_DIR / "columns"
+JOINS_DIR = KNOWLEDGE_BASE_DIR / "joins"
+GLOSSARY_DIR = KNOWLEDGE_BASE_DIR / "glossary"
+DOMAINS_DIR = KNOWLEDGE_BASE_DIR / "domains"
+BUSINESS_RULES_DIR = KNOWLEDGE_BASE_DIR / "business_rules"
+SQL_PATTERNS_DIR = KNOWLEDGE_BASE_DIR / "sql_patterns"
+EXAMPLES_DIR = KNOWLEDGE_BASE_DIR / "examples"
+STATS_DIR = KNOWLEDGE_BASE_DIR / "stats"
 
-# Minimum relevance score [-1, 1] a table needs to appear in results
+CACHE_DIR = BASE_DIR / ".cache"
+
+EMBEDDING_MODEL = "BAAI/bge-m3"
+RERANKER_MODEL = "BAAI/bge-reranker-v2-m3"
+
+TOP_K = 10
+RRF_K = 60
+
 SCORE_THRESHOLD = 0.10
-
-# For simple aggregation queries: if the second-best table's score is less
-# than this fraction of the best table's score, drop it (keep only top-1)
 SCORE_GAP_FACTOR = 0.3
 
-# ── Query classification keywords ───────────────────────────────────
-
-AGG_KEYWORDS = frozenset({   # trigger "simple_agg" classification
+AGG_KEYWORDS = frozenset({
     "count", "total", "sum", "avg", "average", "how many",
 })
 
-JOIN_KEYWORDS = frozenset({  # trigger "multi_table" classification
-    "and", "vs", "versus", "by", "per", "with", "breakdown",
+JOIN_KEYWORDS = frozenset({
+    "vs", "versus", "breakdown",
     "compare", "comparison",
 })
-
-# ── Stopwords (filtered out during keyword matching) ────────────────
 
 STOPWORDS = frozenset({
     "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
@@ -39,33 +47,7 @@ STOPWORDS = frozenset({
     "about", "up", "down", "also", "now", "then", "but", "or", "if",
 })
 
-# Maps natural-language aggregation words to their SQL equivalents
 AGGREGATION_TYPES = {
     "total": "SUM", "sum": "SUM", "count": "COUNT",
     "avg": "AVG", "average": "AVG",
 }
-
-# ── Directory resolution ────────────────────────────────────────────
-
-def _find_project_root():
-    """
-    Walk up from this file's directory until we find pyproject.toml or .git.
-    This lets us locate the project root regardless of where the code is installed.
-    """
-    p = Path(__file__).resolve()
-    for parent in p.parents:
-        if (parent / "pyproject.toml").exists() or (parent / ".git").exists():
-            return parent
-    return p.parent.parent.parent
-
-PROJECT_ROOT = _find_project_root()
-
-# data/ holds all YAML files (context knowledge base + evaluation queries)
-DATA_DIR = PROJECT_ROOT / "data"
-
-# data/contexts/ holds the four YAML knowledge-base files
-CONTEXTS_DIR = DATA_DIR / "contexts"
-
-# .cache/ stores pre-computed vector embeddings so we skip the 4-minute
-# re-encode on every startup
-CACHE_DIR = PROJECT_ROOT / ".cache"
