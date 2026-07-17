@@ -1,107 +1,66 @@
-"""
-Dense vector retrieval using BGE-M3 embeddings stored in an in-memory
-Qdrant collection with Cosine distance.
+import chromadb
+import numpy as np
+from FlagEmbedding import BGEM3FlagModel
 
-BGE-M3 produces a 1024-dimensional embedding per text. Qdrant stores these
-vectors and supports efficient HNSW-based nearest-neighbor search.
-
-Embeddings are cached to disk so the 4-minute CPU encoding only happens
-on the very first run.
-"""
-
-from pathlib import Path
-                         
-import numpy as np                         
-from FlagEmbedding import BGEM3FlagModel                         
-from qdrant_client import QdrantClient                         
-from qdrant_client.models import Distance, PointStruct, VectorParams
-
-from sql_retrieval.config import CACHE_DIR
+from sql_retrieval.config import CACHE_DIR, EMBEDDING_MODEL
 
 
 class VectorRetriever:
     def __init__(self):
-        # Disk cache for pre-computed embeddings (avoids 4-min re-encode)
-        self.cache_dir = CACHE_DIR / "vectors"
-        self.cache_dir.mkdir(parents=True, exist_ok=True)
-
-        # Load the BGE-M3 embedding model (downloads on first use)
-        print("  Loading BGE-M3...")
-        self.encoder = BGEM3FlagModel("BAAI/bge-m3", device="cpu")
-
-        # In-memory Qdrant (fast, no file locks). Re-index from cached
-        # embeddings takes <1s, so persistence doesn't save time here.
-        self.store = QdrantClient(":memory:")
-        self.store.create_collection(
-            "tables",
-            vectors_config=VectorParams(size=1024, distance=Distance.COSINE),
+        self.encoder = BGEM3FlagModel(EMBEDDING_MODEL, device="cpu")
+        persist = str(CACHE_DIR / "chroma")
+        self.client = chromadb.PersistentClient(path=persist)
+        self.table_collection = self.client.get_or_create_collection(
+            name="tables", metadata={"hnsw:space": "cosine"}
         )
+        self.column_collection = self.client.get_or_create_collection(
+            name="columns", metadata={"hnsw:space": "cosine"}
+        )
+        self._table_count = 0
+        self._column_count = 0
 
-        self.index_map = {}  # maps Qdrant point ID → table name
-
-    def index(self, texts: dict[str, str]):
-        """
-        Encode all table texts and upsert them into Qdrant.
-        On the first run this takes ~4 minutes on CPU.
-        Subsequent runs load cached embeddings in <1s.
-        """
+    def index_tables(self, texts: dict[str, str]):
         names = list(texts.keys())
-        cache_file = self.cache_dir / "embeddings.npy"
-        names_file = self.cache_dir / "names.txt"
+        docs = [texts[n] for n in names]
+        ids = [f"tbl_{i}" for i in range(len(names))]
+        vecs = self.encoder.encode(docs, batch_size=8)["dense_vecs"]
+        self.table_collection.add(
+            ids=ids, embeddings=vecs.tolist(),
+            metadatas=[{"name": n} for n in names],
+            documents=docs
+        )
+        self._table_count = len(names)
+        print(f"  Indexed {len(names)} tables into ChromaDB")
 
-        # ── Cache hit: load pre-computed embeddings from disk ──────────
-        if cache_file.exists() and names_file.exists():
-            cached_names = names_file.read_text(encoding="utf-8").splitlines()
-            if cached_names == names:
-                print("  Loading cached embeddings...")
-                all_vecs = np.load(cache_file)
-                points = []
-                for i, (name, vec) in enumerate(zip(names, all_vecs)):
-                    points.append(
-                        PointStruct(id=i, vector=vec.tolist(), payload={"name": name})
-                    )
-                    self.index_map[i] = name
-                self.store.upsert("tables", points=points)
-                print(f"  Loaded {len(points)} cached vectors")
-                return
+    def index_columns(self, texts: dict[str, str]):
+        names = list(texts.keys())
+        docs = [texts[n] for n in names]
+        ids = [f"col_{i}" for i in range(len(names))]
+        vecs = self.encoder.encode(docs, batch_size=8)["dense_vecs"]
+        self.column_collection.add(
+            ids=ids, embeddings=vecs.tolist(),
+            metadatas=[{"name": n} for n in names],
+            documents=docs
+        )
+        self._column_count = len(names)
+        print(f"  Indexed {len(names)} columns into ChromaDB")
 
-        # ── Cache miss: encode all table texts ─────────────────────────
-        print(f"  Encoding {len(names)} texts (first run, ~6 min on CPU)...")
-
-        # Encode all table descriptions in one batch call
-        encoded = self.encoder.encode(
-            [texts[n] for n in names], batch_size=8
-        )["dense_vecs"]
-
-        # Save to disk for next time
-        np.save(cache_file, encoded)
-        names_file.write_text("\n".join(names), encoding="utf-8")
-
-        # Upload points to Qdrant
-        points = []
-        for i, (name, vec) in enumerate(zip(names, encoded)):
-            points.append(
-                PointStruct(id=i, vector=vec.tolist(), payload={"name": name})
-            )
-            self.index_map[i] = name
-        self.store.upsert("tables", points=points)
-        print(f"  Indexed {len(points)} vectors into Qdrant")
-
-    def search(self, query: str, top_k=10):
-        """
-        Encode the query with the same BGE-M3 model,
-        then find the top_k nearest tables by cosine similarity in Qdrant.
-        """
+    def search_tables(self, query: str, top_k=10):
         vec = self.encoder.encode([query], batch_size=8)["dense_vecs"][0]
-        hits = self.store.query_points(
-            "tables", query=vec.tolist(), limit=top_k
-        ).points
+        results = self.table_collection.query(
+            query_embeddings=[vec.tolist()], n_results=top_k
+        )
+        out = []
+        for name, score in zip(results["metadatas"][0], results["distances"][0]):
+            out.append((name["name"], 1 - score))
+        return out
 
-        # Deduplicate by name (keep highest score if duplicates exist)
-        seen = {}
-        for h in hits:
-            name = h.payload.get("name", "")
-            if name not in seen or h.score > seen[name]:
-                seen[name] = h.score
-
-        return sorted(seen.items(), key=lambda x: -x[1])[:top_k]
+    def search_columns(self, query: str, top_k=10):
+        vec = self.encoder.encode([query], batch_size=8)["dense_vecs"][0]
+        results = self.column_collection.query(
+            query_embeddings=[vec.tolist()], n_results=top_k
+        )
+        out = []
+        for name, score in zip(results["metadatas"][0], results["distances"][0]):
+            out.append((name["name"], 1 - score))
+        return out
