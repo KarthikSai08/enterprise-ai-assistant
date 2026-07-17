@@ -14,6 +14,16 @@ env/
 
 # Cache
 .cache/
+.coverage
+coverage/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+
+# Generated output
+knowledge_base/
+scripts/knowledge_base/
 
 # IDE
 .vscode/
