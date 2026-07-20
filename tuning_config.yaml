@@ -1,0 +1,43 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# SQL Metadata Retrieval — Tuning Configuration
+# Edit these values to adjust retrieval behavior WITHOUT touching Python code.
+# All values have defaults, so this file is optional.
+# ──────────────────────────────────────────────────────────────────────────────
+
+retrieval:
+  top_k: 10                    # top-N results from dense vector search
+  rrf_k: 60                    # RRF rank fusion constant (higher = less BM25 influence)
+  column_rrf_k: 60             # RRF constant for column-level fusion
+  column_top_k: 15             # top-N columns returned per query
+  score_threshold: 0.001       # minimum table score to appear in results
+  keyword_score_threshold: 0.0001  # lower threshold when keyword match exists
+  score_gap_factor: 0.3        # if 2nd/1st score < this, keep only 1st result
+
+candidate_pool:
+  multiplier: 5                # candidate_pool = max(k * N, min)
+  min: 30                      # minimum candidate pool size
+  rrf_k_multiplier: 2          # rrf_k = max(k * N, rrf_k_min)
+  rrf_k_min: 3                 # minimum rrf_k value
+  reranker_k_multiplier: 1     # reranker_k = max(k * N, reranker_k_min)
+  reranker_k_min: 2            # minimum reranker_k value
+
+domain_detection:
+  sim_min_abs: 0.20            # minimum cosine similarity to consider a domain
+  sim_gap: 0.08                # max gap below top domain to still include
+  file_fallback_floor: 0.15    # lower bar when file-based keywords also match
+
+score_blending:
+  ce_weight: 0.40              # cross-encoder contribution to final score
+  rrf_weight: 0.60             # RRF contribution to final score
+
+domain_boost:
+  top_primary: 0.75            # boost floor for top-domain primary tables
+  top_non_primary: 0.55        # boost floor for top-domain non-primary tables
+  other_primary: 0.50          # boost floor for lower-domain primary tables
+  other_non_primary: 0.40      # boost floor for lower-domain non-primary tables
+  existing_floor: 0.85         # floor multiplier for tables already in RRF
+  new_floor: 0.65              # floor multiplier for tables newly injected
+
+keyword_scoring:
+  score_per_match: 1.00        # score added per matched keyword
+  null_table_base: 0.01        # tiny base score for keyword-matched tables not in RRF
