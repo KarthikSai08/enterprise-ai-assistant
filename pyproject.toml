@@ -3,12 +3,15 @@ requires = ["setuptools>=68.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "sql-metadata-retrieval"
+name = "sql-chatbot"
 version = "1.0.0"
-description = "SQL Metadata Retrieval — BGE-M3 + BM25 + RRF + BGE Reranker (No LLM)"
+description = "SQL Chatbot — Semantic metadata retrieval with BGE-M3 + BM25 + RRF + BGE Reranker + LLM-based SQL generation"
 requires-python = ">=3.10"
 dependencies = [
     "pyyaml>=6.0",
+    "fastapi>=0.115.0",
+    "uvicorn>=0.32.0",
+    "pydantic>=2.0.0",
     "numpy>=1.24",
     "FlagEmbedding>=1.4.0",
     "chromadb>=0.5.0",
@@ -17,6 +20,7 @@ dependencies = [
     "python-dotenv>=1.0",
     "rapidfuzz>=3.0.0",
     "rank_bm25>=0.2.2",
+    "groq>=0.5.0",
 ]
 
 [tool.setuptools.packages.find]
