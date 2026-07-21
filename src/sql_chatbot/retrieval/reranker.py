@@ -1,21 +1,19 @@
+import logging
+
 from sentence_transformers import CrossEncoder
 
 from sql_chatbot.config import RERANKER_MODEL
 
+logger = logging.getLogger(__name__)
+
 
 class Reranker:
     def __init__(self):
-        print("  Loading BGE Reranker...")
+        logger.info("Loading BGE Reranker...")
         self.model = CrossEncoder(RERANKER_MODEL, device="cpu")
 
-    def rerank(
-        self,
-        query: str,
-        candidates: list[tuple],
-        original_scores: dict,
-        tables: dict,
-        top_k=5,
-    ):
+    def rerank(self, query: str, candidates: list[tuple],
+                original_scores: dict, tables: dict,top_k=5,):
         pairs = []
         for name, _ in candidates[:10]:
             tbl = tables.get(name, {})
@@ -52,6 +50,7 @@ class Reranker:
         candidates: list[tuple[str, float]],
         column_texts: dict[str, str],
         top_k=5,
+        original_scores: dict | None = None,
     ):
         pairs = []
         col_names = []
@@ -68,6 +67,6 @@ class Reranker:
             scores = [scores]
 
         indexed = list(zip(col_names, scores))
-        indexed.sort(key=lambda x: -x[1])
+        indexed.sort(key=lambda x: (-x[1], -(original_scores or {}).get(x[0], 0)))
 
         return [(name, score) for name, score in indexed[:top_k]]

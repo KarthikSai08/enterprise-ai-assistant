@@ -1,9 +1,10 @@
+import logging
 import chromadb
-import numpy as np
-from FlagEmbedding import BGEM3FlagModel
 
+from FlagEmbedding import BGEM3FlagModel
 from sql_chatbot.config import CACHE_DIR, EMBEDDING_MODEL
 
+logger = logging.getLogger(__name__)
 
 class VectorRetriever:
     def __init__(self):
@@ -23,11 +24,11 @@ class VectorRetriever:
         existing = self.table_collection.count()
         if existing == len(texts):
             self._table_count = existing
-            print(f"  Tables already indexed ({existing} docs), skipping")
+            logger.info("Tables already indexed (%d docs), skipping", existing)
             return
         if existing > 0:
             self.table_collection.delete(where={})
-            print(f"  Cleared {existing} stale table embeddings")
+            logger.info("Cleared %d stale table embeddings", existing)
         names = list(texts.keys())
         docs = [texts[n] for n in names]
         ids = [f"tbl_{i}" for i in range(len(names))]
@@ -38,17 +39,17 @@ class VectorRetriever:
             documents=docs
         )
         self._table_count = len(names)
-        print(f"  Indexed {len(names)} tables into ChromaDB")
+        logger.info("Indexed %d tables into ChromaDB", len(names))
 
     def index_columns(self, texts: dict[str, str]):
         existing = self.column_collection.count()
         if existing == len(texts):
             self._column_count = existing
-            print(f"  Columns already indexed ({existing} docs), skipping")
+            logger.info("Columns already indexed (%d docs), skipping", existing)
             return
         if existing > 0:
             self.column_collection.delete(where={})
-            print(f"  Cleared {existing} stale column embeddings")
+            logger.info("Cleared %d stale column embeddings", existing)
         names = list(texts.keys())
         docs = [texts[n] for n in names]
         ids = [f"col_{i}" for i in range(len(names))]
@@ -59,7 +60,7 @@ class VectorRetriever:
             documents=docs
         )
         self._column_count = len(names)
-        print(f"  Indexed {len(names)} columns into ChromaDB")
+        logger.info("Indexed %d columns into ChromaDB", len(names))
 
     def search_tables(self, query: str = "", top_k=10, query_vec=None):
         if query_vec is None:
