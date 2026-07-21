@@ -138,7 +138,7 @@ def load_joins() -> list[dict]:
             "to": j.get("to_table", j.get("to", "")),
             "on": j.get("on_clause", j.get("on", "")),
             "meaning": j.get("business_meaning", j.get("meaning", "")).lower(),
-            "join_type": j.get("join_type", "INNER"),
+            "join_type": j.get("default_join_type", j.get("join_type", "INNER")),
         }
         for j in data.get("joins", [])
     ]

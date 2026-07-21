@@ -1,6 +1,6 @@
-﻿\"\"\"Business metadata definitions for all database tables.\"\"\"
+"""Business metadata definitions for all database tables."""
 
-TABLE_META = TABLE_META = {
+TABLE_META = {
     "dim_OrgType": {
         "display_name": "Organization Types",
         "domain": "Reference",
@@ -1734,7 +1734,7 @@ TABLE_META = TABLE_META = {
  
 # Column alias/role map: (table, column) -> aliases, role, importance, de
 
-COLUMN_META = COLUMN_META = {
+COLUMN_META = {
     ("dim_OrgType", "orgTypeCode"): {"aliases": ["type code", "org code", "type short"], "role": "identifier", "importance": "high", "description": "Short code for organization type (e.g., DLR, DIST, VND)"},
     ("dim_OrgType", "orgTypeName"): {"aliases": ["type name", "org type name", "type description"], "role": "dimension", "importance": "high", "description": "Full name of organization type (e.g., Dealer, Distributor)"},
     ("dim_OrgType", "description"): {"aliases": ["type detail", "notes"], "role": "description", "importance": "low", "description": "Detailed description of the organization type"},
@@ -1905,4 +1905,4 @@ COLUMN_META = COLUMN_META = {
 # All known isActive columns should get these aliases
 
 
-ACTIVE_ALIASES = ACTIVE_ALIASES = {"aliases": ["active", "enabled", "is active", "is enabled", "active flag", "status"], "role": "status", "importance": "low", "description": "Whether this record is active/enabled"}
+ACTIVE_ALIASES = {"aliases": ["active", "enabled", "is active", "is enabled", "active flag", "status"], "role": "status", "importance": "low", "description": "Whether this record is active/enabled"}
