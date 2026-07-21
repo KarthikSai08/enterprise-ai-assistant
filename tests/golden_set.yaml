@@ -1,0 +1,77 @@
+# Golden set: query → expected top tables
+# Each entry: {query, expected: [table_name, ...], type}
+# type: single | cross-domain | not_supported | known_failure
+# Pass if all expected tables appear in top-K results (K=1 for single, K=3 for cross-domain / known_failure).
+
+cases:
+  # ── Simple single-table lookups ──
+  - query: "list all employees"
+    expected: [tbl_Employee]
+    type: single
+  - query: "show me departments"
+    expected: [tbl_Department]
+    type: single
+  - query: "view product categories"
+    expected: [tbl_ProductCategory]
+    type: single
+  - query: "display all warehouses"
+    expected: [tbl_Warehouse]
+    type: single
+  - query: "list all drivers"
+    expected: [tbl_DriverMaster]
+    type: single
+  - query: "show all customers"
+    expected: [tbl_Organization]
+    type: single
+
+  # ── Cross-domain queries ──
+  - query: "compare sales and purchase this month"
+    expected: [tbl_SaleInvoiceHeader, tbl_PurchaseOrder]
+    type: cross-domain
+  - query: "which products have low stock and high sales"
+    expected: [tbl_StockLedger, tbl_SaleInvoiceDetail]
+    type: cross-domain
+  - query: "employee attendance and payroll for march"
+    expected: [tbl_Attendance, tbl_PayrollHeader]
+    type: cross-domain
+  - query: "vendor payments vs customer payments"
+    expected: [tbl_PaymentMade, tbl_PaymentReceived]
+    type: cross-domain
+  - query: "gst returns and eway bills"
+    expected: [tbl_GSTReturn, tbl_EwayBill]
+    type: cross-domain
+  - query: "inventory adjustments and stock transfers this month"
+    expected: [tbl_InventoryAdjustment, tbl_StockTransfer]
+    type: cross-domain
+
+  # ── NOT_SUPPORTED (should be rejected) ──
+  - query: "what is the weather today"
+    expected: []
+    type: not_supported
+  - query: "delete all records"
+    expected: []
+    type: not_supported
+  - query: "update the price of product xyz"
+    expected: []
+    type: not_supported
+  - query: "who is the CEO of microsoft"
+    expected: []
+    type: not_supported
+
+  # ── Known failure cases ──
+  # "grand" contains "and" as substring — keyword scoring may match "grand" partially
+  - query: "grand total of sales this year"
+    expected: [tbl_SaleInvoiceHeader]
+    type: known_failure
+  # Cross-domain (sales + purchase) triggers domain-boost floors, may over-pull
+  - query: "sales vs purchase comparison for q1"
+    expected: [tbl_SaleInvoiceHeader, tbl_PurchaseOrder]
+    type: known_failure
+  # "and" in "attendance" — substring keyword match when table keywords include "and"
+  - query: "total attendance and leave balance"
+    expected: [tbl_Attendance, tbl_LeaveApplication]
+    type: known_failure
+  # "ledger" in "ledgers" — singular/plural scoring may separate
+  - query: "accounts and ledgers"
+    expected: [tbl_AccountGroup, tbl_AccountLedger]
+    type: known_failure
