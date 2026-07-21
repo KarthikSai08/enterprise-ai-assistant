@@ -1,7 +1,7 @@
 import json
 import re
 
-from sql_chatbot.config import LLM_PROVIDER, GROQ_API_KEY, OLLAMA_BASE_URL
+from sql_chatbot.config import LLM_PROVIDER, GROQ_API_KEY
 from sql_chatbot.generation.llm_client import generate_sql
 
 
@@ -41,7 +41,7 @@ Example: "how many products" -> {{"intents": ["COUNT"], "entity": "products"}}""
 def _llm_available() -> bool:
     if LLM_PROVIDER == "groq":
         return bool(GROQ_API_KEY)
-    return bool(OLLAMA_BASE_URL)
+    return True
 
 
 def detect_intent_rule_based(query: str) -> dict | None:
