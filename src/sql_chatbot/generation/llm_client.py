@@ -1,5 +1,9 @@
+import logging
+
 import requests
 from sql_chatbot.config import OLLAMA_BASE_URL, OLLAMA_MODEL, GROQ_API_KEY, GROQ_MODEL, LLM_PROVIDER
+
+logger = logging.getLogger(__name__)
 
 
 def _call_ollama(prompt: str, model: str = None) -> str:
@@ -48,13 +52,15 @@ def generate_sql(prompt: str, provider: str = None, groq_key: str = None, model:
         try:
             return _call_groq(prompt, model, groq_key)
         except requests.RequestException as e:
-            print(f"  Groq failed ({e}) — falling back to Ollama")
+            logger.warning("Groq failed (%s) — falling back to Ollama", e)
             return _call_ollama(prompt, model)
     try:
         return _call_ollama(prompt, model)
     except (requests.RequestException, RuntimeError) as e:
-        print(f"  Ollama failed ({e}) — falling back to Groq")
-        return _call_groq(prompt, model, groq_key)
+        if groq_key or GROQ_API_KEY:
+            logger.warning("Ollama failed (%s) — falling back to Groq", e)
+            return _call_groq(prompt, model, groq_key)
+        raise
 
 
 def generate_answer(
@@ -74,10 +80,12 @@ def generate_answer(
         try:
             return _call_groq(prompt, model, groq_key)
         except requests.RequestException as e:
-            print(f"  Answer LLM Groq failed ({e}) — falling back to Ollama")
+            logger.warning("Answer LLM Groq failed (%s) — falling back to Ollama", e)
             return _call_ollama(prompt, model)
     try:
         return _call_ollama(prompt, model)
     except (requests.RequestException, RuntimeError) as e:
-        print(f"  Answer LLM Ollama failed ({e}) — falling back to Groq")
-        return _call_groq(prompt, model, groq_key)
+        if groq_key or GROQ_API_KEY:
+            logger.warning("Answer LLM Ollama failed (%s) — falling back to Groq", e)
+            return _call_groq(prompt, model, groq_key)
+        raise
