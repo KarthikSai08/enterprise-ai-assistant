@@ -40,9 +40,10 @@ def print_result(result, retriever=None):
 
     if result.get("relevant") and retriever:
         if retriever.db_connected:
-            print("\n  Generating SQL...")
+            print("\n[Bot] >>> Generating SQL...")
             try:
-                sql_result = run_sql_with_answer(result["query"], result)
+                corrected_query = result.get("normalized", result["query"])
+                sql_result = run_sql_with_answer(corrected_query, result)
                 if sql_result.get("not_supported"):
                     msg = sql_result.get("error") or "This question isn't answerable from the database."
                     print(f"  {msg}")
@@ -52,13 +53,13 @@ def print_result(result, retriever=None):
                         print(f"  {line}")
                     print(f"  {'─' * 60}")
                     if sql_result.get("row_count", 0) > 0:
-                        print(f"\n  Result: {sql_result['row_count']} row(s)")
+                        print(f"\n[Bot] >>> Result: {sql_result['row_count']} row(s)")
                         for row in sql_result["rows"][:5]:
-                            print(f"    {row}")
+                            print(f"        {row}")
                     if sql_result.get("error"):
                         print(f"  Execution error: {sql_result['error']}")
                     if sql_result.get("answer"):
-                        print(f"\n  {sql_result['answer']}")
+                        print(f"\n[Bot] >>> {sql_result['answer']}")
             except Exception as e:
                 print(f"  SQL generation failed: {e}")
         else:
@@ -73,7 +74,7 @@ def interactive(retriever):
 
     while True:
         try:
-            q = input("> ").strip()
+            q = input("\n[User] >>> ").strip()
         except (EOFError, KeyboardInterrupt):
             break
         if not q or q == "exit":
@@ -105,7 +106,6 @@ def main():
     tables = data["tables"]
     domains = data["domains"]
     joins = data["joins"]
-    col_syns = data["col_syns"]
     print(f"  {len(tables)} tables, {len(domains)} domains, {len(joins)} joins")
     if data.get("rules"):
         print(f"  {len(data['rules'])} business rules")
