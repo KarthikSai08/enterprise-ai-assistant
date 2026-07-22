@@ -193,7 +193,6 @@ class Retriever:
         query_vec = self.vector.encoder.encode([corrected], batch_size=8)["dense_vecs"][0]
 
         domains = self.domain_detector.detect(corrected, query_vec)
-        domain_table_set = self.domain_detector.get_domain_table_set(domains)
         query_type = self.preprocessor.classify_query(qn, domains)
 
         if query_type == "simple_agg":
@@ -209,9 +208,6 @@ class Retriever:
 
         bm = self.bm25.search(qn, candidate_pool)
         vc = self.vector.search_tables(top_k=TOP_K, query_vec=query_vec)
-        if domain_table_set:
-            bm = [(n, s) for n, s in bm if n in domain_table_set]
-            vc = [(n, s) for n, s in vc if n in domain_table_set]
 
         rrf = {}
         for rank, (name, _) in enumerate(bm):
@@ -229,12 +225,21 @@ class Retriever:
                 tbl_data = self.tables.get(t, {})
                 tbl_kws = set(k.lower() for k in tbl_data.get("search_keywords", []))
                 tbl_name_parts = set(t.lower().replace("tbl_", "").replace("_", " ").split())
+                sample_vals = set()
+                for c in tbl_data.get("columns", []):
+                    for v in c.get("sample_values", []):
+                        sv = str(v).lower()
+                        sample_vals.add(sv)
+                        for word in sv.replace("_", " ").split():
+                            if len(word) > 2:
+                                sample_vals.add(word)
                 has_overlap = bool(
                     tbl_kws & q_words_domain
                     or {kw + "s" for kw in tbl_kws} & q_words_domain
                     or {kw[:-1] for kw in tbl_kws if kw.endswith("s") and len(kw) > 3} & q_words_domain
                     or tbl_name_parts & q_words_domain
                     or {np + "s" for np in tbl_name_parts} & q_words_domain
+                    or sample_vals & q_words_domain
                 )
                 if not has_overlap:
                     continue
@@ -252,18 +257,25 @@ class Retriever:
                 else:
                     rrf[t] = max(max_rrf * DOMAIN_BOOST_NEW_FLOOR, floor)
 
-        for name in rrf:
-            tbl = self.tables.get(name, {})
-            weight_factor = tbl.get("search_weight", 5) / 5
-            rrf[name] = rrf[name] * weight_factor
+        search_weights = {
+            name: tbl.get("search_weight", 5) / 5
+            for name, tbl in ((n, self.tables.get(n, {})) for n in rrf)
+        }
 
         qw = {w for w in ql.split() if w not in STOPWORDS}
         keyword_hit = False
         keyword_scores = {}
         for name, tbl in self.tables.items():
-            if domain_table_set and name not in domain_table_set:
-                continue
             kws = [k.lower() for k in tbl.get("keywords", []) if len(k) > 2]
+            sample_vals = set()
+            for c in tbl.get("columns", []):
+                for v in c.get("sample_values", []):
+                    sv = str(v).lower()
+                    if len(sv) > 2:
+                        sample_vals.add(sv)
+            for sv in sample_vals:
+                if sv in ql.lower():
+                    kws.append(sv)
             matched_words = set()
             for kw in kws:
                 if re.search(rf"\b{re.escape(kw)}\b", ql):
@@ -280,8 +292,7 @@ class Retriever:
                         elif any(wq.startswith(w) or w.startswith(wq) for wq in qw):
                             matched_words.add(w)
             if matched_words:
-                weight = tbl.get("search_weight", 5) / 5
-                keyword_scores[name] = len(matched_words) * weight
+                keyword_scores[name] = len(matched_words)
                 keyword_hit = True
 
         for name, mcount in keyword_scores.items():
@@ -291,7 +302,7 @@ class Retriever:
             else:
                 rrf[name] = boost + KEYWORD_NULL_TABLE_BASE
 
-        candidates = sorted(rrf.items(), key=lambda x: -x[1])[:rrf_k]
+        candidates = sorted(rrf.items(), key=lambda x: (-x[1], -search_weights.get(x[0], 1.0)))[:rrf_k]
 
         top_score = candidates[0][1] if candidates else 0
         domain_hit = bool(domains)
@@ -327,7 +338,7 @@ class Retriever:
             (name, round(CE_WEIGHT * score + RRF_WEIGHT * min(1.0, rrf.get(name, 0) / max_rrf_val), 4))
             for name, score in reranked
         ]
-        reranked.sort(key=lambda x: -x[1])
+        reranked.sort(key=lambda x: (-x[1], -search_weights.get(x[0], 1.0)))
         confidence = reranked[0][1] if reranked else 0.0
 
         if confidence < 0.05 and not keyword_hit:
@@ -374,6 +385,13 @@ class Retriever:
             cols = col_lookup.get(name) or self._match_columns(query, name, t.get("columns", []))
             if not cols:
                 cols = [c["name"] for c in t.get("columns", [])[:3]]
+            important = t.get("important_columns", [])
+            metrics = t.get("business_metrics", [])
+            priority_cols = dict.fromkeys(important + metrics)
+            for cname in list(priority_cols):
+                if cname in cols:
+                    cols.remove(cname)
+                cols.insert(0, cname)
 
             table_joins = [
                 j for j in self.joins

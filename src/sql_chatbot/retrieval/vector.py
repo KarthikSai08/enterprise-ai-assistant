@@ -17,13 +17,11 @@ class VectorRetriever:
         self.column_collection = self.client.get_or_create_collection(
             name="columns", metadata={"hnsw:space": "cosine"}
         )
-        self._table_count = 0
-        self._column_count = 0
+
 
     def index_tables(self, texts: dict[str, str]):
         existing = self.table_collection.count()
         if existing == len(texts):
-            self._table_count = existing
             logger.info("Tables already indexed (%d docs), skipping", existing)
             return
         if existing > 0:
@@ -38,13 +36,11 @@ class VectorRetriever:
             metadatas=[{"name": n} for n in names],
             documents=docs
         )
-        self._table_count = len(names)
         logger.info("Indexed %d tables into ChromaDB", len(names))
 
     def index_columns(self, texts: dict[str, str]):
         existing = self.column_collection.count()
         if existing == len(texts):
-            self._column_count = existing
             logger.info("Columns already indexed (%d docs), skipping", existing)
             return
         if existing > 0:
@@ -59,7 +55,6 @@ class VectorRetriever:
             metadatas=[{"name": n} for n in names],
             documents=docs
         )
-        self._column_count = len(names)
         logger.info("Indexed %d columns into ChromaDB", len(names))
 
     def search_tables(self, query: str = "", top_k=10, query_vec=None):

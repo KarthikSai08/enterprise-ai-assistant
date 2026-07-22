@@ -1,27 +1,14 @@
 import re
 import unicodedata
 
+from sql_chatbot.config import STOPWORDS
+
 _CAMEL_BOUNDARY = re.compile(r"([a-z])([A-Z])")
 _UPPER_SEQ_BOUNDARY = re.compile(r"([A-Z]+)([A-Z][a-z])")
 _LETTER_NUMBER = re.compile(r"([a-zA-Z])(\d)")
 _NUMBER_LETTER = re.compile(r"(\d)([a-zA-Z])")
 _ID_SEPARATORS = re.compile(r"[.\-_/\\]")
 _HAS_IDENTIFIER_STRUCTURE = re.compile(r"[.\-_/\\]|[a-z][A-Z]|[A-Z]{2,}[a-z]|\d[a-zA-Z]|[a-zA-Z]\d")
-
-STOPWORDS = frozenset({
-    "the", "a", "an", "are", "of", "to", "for", "and", "or", "in", "on",
-    "at", "be", "was", "were", "been", "being", "do", "does", "did",
-    "will", "would", "could", "should", "may", "might", "shall", "can",
-    "with", "from", "as", "into", "through", "during", "before", "after",
-    "above", "below", "between", "out", "off", "over", "under", "again",
-    "further", "then", "once", "here", "there", "when", "where", "why",
-    "how", "all", "each", "every", "both", "few", "more", "most", "other",
-    "some", "such", "no", "nor", "not", "only", "own", "same", "so",
-    "than", "too", "very", "just", "because", "but", "if", "me", "my",
-    "our", "your", "his", "her", "its", "their", "this", "that", "these",
-    "those", "what", "which", "who", "whom", "any", "about", "up", "down",
-    "also", "now",
-})
 
 
 def _decompose_identifier(ident: str) -> list[str]:
@@ -64,7 +51,8 @@ class SQLTokenizer:
             return []
         text = unicodedata.normalize("NFKC", text)
         raw_tokens = text.split()
-        out: list[str] = []
+        raw_full: list[str] = []
+        decomp: list[str] = []
 
         for token in raw_tokens:
             if not token or token.isspace():
@@ -73,12 +61,12 @@ class SQLTokenizer:
             token_lower = token.lower()
 
             if self.keep_full_identifiers:
-                out.append(token_lower)
-                
+                raw_full.append(token_lower)
+
             if _HAS_IDENTIFIER_STRUCTURE.search(token):
-                out.extend(_collect_subtokens(token))
+                decomp.extend(_collect_subtokens(token))
 
         if self.remove_stopwords:
-            out = [t for t in out if t not in STOPWORDS or len(t) == 1]
+            raw_full = [t for t in raw_full if t not in STOPWORDS or len(t) == 1]
 
-        return out
+        return raw_full + decomp
