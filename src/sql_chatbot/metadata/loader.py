@@ -1,4 +1,6 @@
+import logging
 from pathlib import Path
+
 import yaml
 
 from sql_chatbot.config import (
@@ -6,6 +8,8 @@ from sql_chatbot.config import (
     DOMAINS_DIR, BUSINESS_RULES_DIR, SQL_PATTERNS_DIR,
     EXAMPLES_DIR, STATS_DIR,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _load_yaml(filepath: Path) -> dict:
@@ -41,10 +45,32 @@ def _build_column_list(col_data: dict) -> list[dict]:
     return cols
 
 
+def _validate_table_schema(table_name: str, col_names: set[str], table_data: dict):
+    for field, label in [
+        ("important_columns", "important_columns"),
+        ("common_filters", "common_filters"),
+        ("common_groupby", "common_groupby"),
+        ("business_metrics", "business_metrics"),
+    ]:
+        refs = table_data.get(field, [])
+        for ref in refs:
+            if ref not in col_names:
+                logger.warning("[%s] %s '%s' not found in column definitions", table_name, label, ref)
+    pk = table_data.get("primary_key", "")
+    if pk and pk not in col_names:
+        logger.warning("[%s] primary_key '%s' not found in column definitions", table_name, pk)
+    for fk in table_data.get("foreign_keys", []):
+        fk_name = fk.get("name", "")
+        if fk_name and fk_name not in col_names:
+            logger.warning("[%s] foreign_key '%s' not found in column definitions", table_name, fk_name)
+
+
 def _merge_table_and_columns(table_data: dict, col_data: dict) -> dict:
     cols = _build_column_list(col_data) if col_data else []
-
+    col_names = {c["name"] for c in cols}
     table_name = table_data.get("table_name", "")
+    _validate_table_schema(table_name, col_names, table_data)
+
     display_name = table_data.get("display_name", "")
     description = table_data.get("description", "")
     search_keywords = table_data.get("search_keywords", [])
@@ -82,7 +108,7 @@ def _merge_table_and_columns(table_data: dict, col_data: dict) -> dict:
         if c.get("search_keywords"):
             col_line += f" [col_keywords: {', '.join(c['search_keywords'])}]"
         if c.get("sample_values"):
-            col_line += f" [values: {', '.join(str(v) for v in c['sample_values'][:4])}]"
+            col_line += f" [values: {', '.join(str(v) for v in c['sample_values'][:20])}]"
         parts.append(col_line)
 
     all_keywords = list(set(k.lower() for k in search_keywords if k))
@@ -128,7 +154,6 @@ def load_all_tables() -> dict[str, dict]:
         col_data = _load_yaml(col_path)
         tables[table_name] = _merge_table_and_columns(table_data, col_data)
     return tables
-
 
 def load_joins() -> list[dict]:
     data = _load_yaml(JOINS_DIR / "joins.yaml")
@@ -233,13 +258,14 @@ def build():
             if c["aliases"]:
                 col_syns[f"{table_name}.{c['name']}"] = c["aliases"]
 
+            key = f"{table_name}.{c['name']}"
             parts = [
-                f"Table: {table_name}",
                 f"Column: {c['name']}",
             ]
             if c["display_name"]:
                 parts.append(f"Display: {c['display_name']}")
-            parts.append(f"Type: {c['datatype']}")
+            if c["datatype"]:
+                parts.append(f"Type: {c['datatype']}")
             if c["description"]:
                 parts.append(f"Description: {c['description']}")
             if c["aliases"]:
@@ -253,7 +279,6 @@ def build():
                 parts.append(f"Keywords: {', '.join(c['search_keywords'])}")
             if c.get("common_user_intents"):
                 parts.append(f"Intents: {' | '.join(c['common_user_intents'])}")
-            key = f"{table_name}.{c['name']}"
             column_texts[key] = " - ".join(parts)
 
     return {
@@ -268,3 +293,4 @@ def build():
         "stats": stats,
         "column_texts": column_texts,
     }
+
