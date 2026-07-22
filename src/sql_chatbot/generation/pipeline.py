@@ -37,16 +37,19 @@ def _extract_column_hint(error: str, valid_columns: set[str]) -> str:
     match = re.search(r"Invalid column(?: name)? '([^']+)'", error) or re.search(r"Invalid column names found in SQL: (\w+)", error)
     if match:
         bad_col = match.group(1)
-        candidates = set()
+        candidates: set[str] = set()
         for vc in valid_columns:
             parts = vc.split(".")
-            if len(parts) == 2:
-                col_name = parts[1]
-                if bad_col.lower() in col_name.lower() or col_name.lower() in bad_col.lower():
+            if len(parts) == 2 and bad_col.lower() == parts[1].lower():
+                candidates.add(parts[0])
+        if not candidates:
+            for vc in valid_columns:
+                parts = vc.split(".")
+                if len(parts) == 2 and bad_col.lower() in parts[1].lower():
                     candidates.add(parts[0])
         if candidates:
             tbl_names = ", ".join(sorted(candidates))
-            tbl_cols = set()
+            tbl_cols: set[str] = set()
             for vc in valid_columns:
                 parts = vc.split(".")
                 if len(parts) == 2 and parts[0] in candidates:
