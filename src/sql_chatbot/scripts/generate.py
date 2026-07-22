@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import os
 import re
 from collections import defaultdict
@@ -9,14 +7,18 @@ import yaml
 from dotenv import load_dotenv
 
 from sql_chatbot.scripts.metadata_data import TABLE_META, COLUMN_META as _RAW_COLUMN_META, ACTIVE_ALIASES
+from sql_chatbot.scripts.kb_bootstrap_data import (
+    DOMAINS_DATA, GLOSSARY_DATA, EXAMPLES_DATA,
+    BUSINESS_RULES_DATA, SQL_PATTERNS_DATA, STATS_DATA,
+)
 
 load_dotenv(Path(__file__).resolve().parent.parent.parent.parent / ".env")
 
-SERVER = os.getenv("DB_SERVER", "YOUR_SERVER_NAME_HERE")
-DATABASE = os.getenv("DB_NAME", "SQLChatBot_DB")
+SERVER = os.getenv("DB_SERVER", "")
+DATABASE = os.getenv("DB_NAME", "")
 USER = os.getenv("DB_USER", "")
 PASSWORD = os.getenv("DB_PASS", "")
-TRUSTED = os.getenv("DB_TRUSTED", "false").lower() in ("true", "1", "yes")
+TRUSTED = os.getenv("DB_TRUSTED", "true").lower() in ("true", "1", "yes")
 SCHEMA = os.getenv("DB_SCHEMA", "dbo")
 
 BASE = Path(__file__).resolve().parent.parent.parent.parent / "knowledge_base"
@@ -337,6 +339,162 @@ def derive_display_name_from_table(table_name: str) -> str:
     return s.strip()
 
 
+# ---------------------------------------------------------------------------
+# Auto-fill helpers — fill empty metadata fields for columns not in COLUMN_META
+# ---------------------------------------------------------------------------
+
+_NAME_WORD_BLACKLIST = {"id", "tbl", "dim", "dmn"}
+
+
+def _split_camel(name: str) -> list[str]:
+    """Split camelCase/PascalCase into words."""
+    s = re.sub(r"([a-z])([A-Z])", r"\1 \2", name)
+    s = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", s)
+    return [w for w in re.split(r"[_\s]+", s) if w]
+
+
+def _name_to_words(name: str) -> list[str]:
+    """Convert column name to lowercase word list."""
+    return [w.lower() for w in _split_camel(name) if w.lower() not in _NAME_WORD_BLACKLIST]
+
+
+_SAMPLE_VALUE_PATTERNS: dict[str, list[str]] = {
+    "gender": ["Male", "Female"],
+    "maritalstatus": ["Married", "Unmarried", "Divorced"],
+    "bloodgroup": ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"],
+    "employmenttype": ["Permanent", "Contract", "Temporary", "Intern", "Probation"],
+    "worklocation": ["Mumbai", "Delhi", "Bangalore", "Pune", "Ahmedabad", "Chennai", "Kolkata", "Hyderabad"],
+    "yesno": ["Yes", "No"],
+    "truefalse": ["true", "false"],
+    "activeinactive": ["Active", "Inactive"],
+    "paymentterm": ["Net 30", "Net 45", "Net 60", "Advance", "COD"],
+    "uom": ["KG", "MT", "Pieces", "Liters", "Nos", "Box"],
+    "gradename": ["Grade A", "Grade B", "Grade C", "Premium"],
+    "categoryname": ["Raw Material", "Finished Goods", "Consumables", "Edible Oils", "Packaging", "Chemicals", "Spares"],
+    "classname": ["Premium", "Standard", "Economy", "Grade A", "Grade B", "Grade C"],
+    "orgtype": ["Dealer", "Distributor", "Vendor", "Transporter", "CNF", "Customer"],
+    "statustype": ["Pending", "Approved", "Rejected", "Cancelled", "Completed", "Active", "Inactive"],
+}
+
+
+def _auto_fill_aliases(col_name: str) -> list[str]:
+    words = _name_to_words(col_name)
+    if not words:
+        return []
+    seen: set[str] = set()
+    result: list[str] = []
+    for w in words:
+        wl = w.lower()
+        if wl not in seen and wl not in _NAME_WORD_BLACKLIST:
+            seen.add(wl)
+            result.append(wl)
+    name_lower = " ".join(result)
+    if name_lower and name_lower not in seen:
+        result.append(name_lower)
+    return result
+
+
+def _auto_fill_aggregations_allowed(datatype: str, role: str = "") -> list[str]:
+    if role in ("foreign_key", "identifier", "status"):
+        return []
+    if role == "metric":
+        return ["SUM", "AVG", "MIN", "MAX"]
+    if datatype in ("int", "decimal", "float", "bigint", "smallint", "tinyint", "money", "real"):
+        return ["SUM", "AVG", "MIN", "MAX"]
+    return []
+
+
+def _auto_fill_sample_values(col_name: str) -> list[str]:
+    key = col_name.lower().replace("_", "").replace(" ", "")
+    for pattern, values in _SAMPLE_VALUE_PATTERNS.items():
+        if pattern in key:
+            return values
+    if col_name.lower().startswith("is") and col_name != "isActive":
+        return ["true", "false"]
+    return []
+
+
+def _auto_fill_search_keywords(col_name: str, aliases: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for w in _name_to_words(col_name):
+        wl = w.lower()
+        if wl not in seen:
+            seen.add(wl)
+            result.append(wl)
+    for alias in aliases:
+        for w in alias.lower().split():
+            if w not in seen:
+                seen.add(w)
+                result.append(w)
+    return result
+
+
+def _auto_fill_intents(col_name: str, role: str) -> list[str]:
+    display = _derive_display_name(col_name).lower()
+    if role == "metric":
+        return [f"Total {display}", f"Average {display}", f"Sum of {display}", f"Maximum {display}", f"Minimum {display}"]
+    if role == "dimension":
+        return [f"Filter by {display}", f"Group by {display}", f"Show {display}"]
+    if role == "identifier":
+        return [f"Find by {display}", f"Search {display}", f"Show {display}"]
+    if role == "foreign_key":
+        return [f"Filter by {display}", f"Join by {display}"]
+    if role == "status":
+        return [f"Filter by {display}"]
+    return []
+
+
+_ROLE_NAME_PATTERNS: dict[str, list[str]] = {
+    "dimension": ["name", "type", "date", "address", "gender", "description", "remark", "note", "comment", "status"],
+    "metric": ["amount", "total", "qty", "quantity", "price", "rate", "score", "value", "count", "charge", "pay", "deduction", "earning"],
+    "identifier": ["code", "number", "no", "ref", "email", "phone", "mobile"],
+    "status": ["isactive", "isenabled", "isdeleted", "isarchived", "islocked"],
+}
+
+
+def _infer_role(col_name: str) -> str | None:
+    name_lower = col_name.lower()
+    words = _name_to_words(col_name)
+    for role, patterns in _ROLE_NAME_PATTERNS.items():
+        for pat in patterns:
+            if pat in name_lower or pat in words:
+                return role
+    return None
+
+
+def _auto_fill_column(col_name: str, datatype: str, role: str, existing: dict) -> dict:
+    """Fill any empty metadata fields for a column with auto-derived values."""
+    out = dict(existing)
+    # Infer better role if current role is "attribute"
+    if role == "attribute" or role == "":
+        inferred = _infer_role(col_name)
+        if not inferred and out.get("is_join_key"):
+            inferred = "foreign_key"
+        if inferred:
+            out["role"] = inferred
+            role = inferred
+            if out.get("filterable") is not None:
+                out["filterable"] = inferred in ("foreign_key", "dimension", "identifier", "status", "metric")
+            if out.get("groupable") is not None:
+                out["groupable"] = inferred in ("dimension", "identifier", "foreign_key", "status")
+            if out.get("aggregatable") is not None:
+                out["aggregatable"] = inferred == "metric"
+    if not out.get("aliases"):
+        out["aliases"] = _auto_fill_aliases(col_name)
+    if not out.get("aggregations_allowed"):
+        out["aggregations_allowed"] = _auto_fill_aggregations_allowed(datatype, role)
+    if out.get("aggregatable") and not out.get("aggregations_allowed"):
+        out["aggregations_allowed"] = _auto_fill_aggregations_allowed(datatype, role)
+    if not out.get("sample_values"):
+        out["sample_values"] = _auto_fill_sample_values(col_name)
+    if not out.get("search_keywords"):
+        out["search_keywords"] = _auto_fill_search_keywords(col_name, out.get("aliases", []))
+    if not out.get("common_user_intents"):
+        out["common_user_intents"] = _auto_fill_intents(col_name, role)
+    return out
+
+
 def build_table_yaml(table_name: str, columns: list[dict], pk_cols: set[str],
                      foreign_keys: list[dict], row_count: int) -> dict:
     table_fks = [fk for fk in foreign_keys if fk["parent_table"] == table_name]
@@ -512,24 +670,31 @@ def merge():
                 cm = ACTIVE_ALIASES
             is_pk = cname == table_yaml["primary_key"] or col.get("is_primary_key", False)
 
-            col_entries.append({
+            col_role = cm.get("role", "attribute")
+            col_datatype = col.get("type", col.get("datatype", "varchar"))
+
+            entry = {
                 "name": cname,
                 "display_name": cname,
-                "datatype": col.get("type", col.get("datatype", "varchar")),
+                "datatype": col_datatype,
                 "description": cm.get("description", f"{cname} column in {table_name}"),
                 "nullable": col.get("nullable", True),
-                "role": cm.get("role", "attribute"),
+                "role": col_role,
                 "importance": cm.get("importance", "medium"),
                 "is_primary_key": is_pk,
                 "is_join_key": cname in [fk["col"] for fk in fk_map.get(table_name, [])],
-                "filterable": cm.get("role") in ("foreign_key", "dimension", "identifier", "status") or cname in ("isActive", "statusId", "status"),
-                "groupable": cm.get("role") in ("dimension", "identifier", "foreign_key", "status"),
-                "aggregatable": cm.get("role") == "metric",
-                "aggregations_allowed": ["SUM", "AVG", "MIN", "MAX"] if cm.get("role") == "metric" else [],
+                "filterable": col_role in ("foreign_key", "dimension", "identifier", "status", "metric") or cname in ("isActive", "statusId", "status"),
+                "groupable": col_role in ("dimension", "identifier", "foreign_key", "status"),
+                "aggregatable": col_role == "metric",
+                "aggregations_allowed": ["SUM", "AVG", "MIN", "MAX"] if col_role == "metric" else [],
                 "aliases": cm.get("aliases", []),
+                "sample_values": cm.get("sample_values", []),
                 "search_keywords": cm.get("search_keywords", []),
                 "common_user_intents": cm.get("common_user_intents", []),
-            })
+            }
+
+            entry = _auto_fill_column(cname, col_datatype, col_role, entry)
+            col_entries.append(entry)
 
         table_yaml["columns"] = col_entries
         _write_yaml(tables_dir / f"{table_name}.yaml", table_yaml)
@@ -543,9 +708,98 @@ def merge():
     print(f"\nDone: {len(TABLE_META)} tables, {kw_total} keywords, {in_total} intents")
 
 
+def write_bootstrap_data():
+    """Write all bootstrapped knowledge base data (domains, glossary, examples, rules, patterns, stats)."""
+    domains_dir = BASE / "domains"
+    glossary_dir = BASE / "glossary"
+    examples_dir = BASE / "examples"
+    rules_dir = BASE / "business_rules"
+    patterns_dir = BASE / "sql_patterns"
+    stats_dir = BASE / "stats"
+
+    for d in [domains_dir, glossary_dir, examples_dir, rules_dir, patterns_dir, stats_dir]:
+        d.mkdir(parents=True, exist_ok=True)
+
+    # Domains
+    _write_yaml(domains_dir / "domains.yaml", {"domains": DOMAINS_DATA})
+    print(f"  domains.yaml ({len(DOMAINS_DATA)} domains)")
+
+    # Glossary
+    _write_yaml(glossary_dir / "glossary.yaml", {"terms": GLOSSARY_DATA})
+    print(f"  glossary.yaml ({len(GLOSSARY_DATA)} terms)")
+
+    # Examples
+    _write_yaml(examples_dir / "examples.yaml", {"examples": EXAMPLES_DATA})
+    print(f"  examples.yaml ({len(EXAMPLES_DATA)} examples)")
+
+    # Business Rules
+    _write_yaml(rules_dir / "business_rules.yaml", {"rules": BUSINESS_RULES_DATA})
+    print(f"  business_rules.yaml ({len(BUSINESS_RULES_DATA)} rules)")
+
+    # SQL Patterns
+    _write_yaml(patterns_dir / "sql_patterns.yaml", {"patterns": SQL_PATTERNS_DATA})
+    print(f"  sql_patterns.yaml ({len(SQL_PATTERNS_DATA)} patterns)")
+
+    # Stats — compute from actual data
+    table_count = len(list((BASE / "tables").glob("*.yaml")))
+    total_cols = sum(len(TABLE_META[t].get("important_columns", [])) + len(TABLE_META[t].get("business_metrics", [])) for t in TABLE_META)
+    stats = {
+        "tables_count": len(TABLE_META),
+        "total_columns": total_cols,
+        "total_foreign_keys": len([j for j in _read_yaml(BASE / "joins" / "joins.yaml").get("joins", [])]),
+        "total_keywords": sum(len(m.get("search_keywords", [])) for m in TABLE_META.values()),
+        "total_intents": sum(len(m.get("common_user_intents", [])) for m in TABLE_META.values()),
+        "total_joins": len([j for j in _read_yaml(BASE / "joins" / "joins.yaml").get("joins", [])]),
+        "total_domains": len(DOMAINS_DATA),
+        "total_rules": len(BUSINESS_RULES_DATA),
+        "total_glossary_terms": len(GLOSSARY_DATA),
+        "total_sql_patterns": len(SQL_PATTERNS_DATA),
+        "total_examples": len(EXAMPLES_DATA),
+    }
+    _write_yaml(stats_dir / "stats.yaml", stats)
+    print(f"  stats.yaml ({len(stats)} stats)")
+
+
+def full_rebuild():
+    """Full rebuild: extract from DB → merge metadata → bootstrap hand-written data."""
+    print("=" * 60)
+    print("STEP 1/3: Extracting schema from database")
+    print("=" * 60)
+    try:
+        generate_from_db()
+    except Exception as e:
+        print(f"\nERROR: Could not extract schema from database: {e}")
+        print()
+        print("If your database is not available, you can still run:")
+        print("  python -m sql_chatbot.scripts.generate merge     # enrich metadata")
+        print("  python -m sql_chatbot.scripts.generate bootstrap # write bootstrap files")
+        print()
+        print("Make sure knowledge_base/ already has table/column YAMLs from a prior extract.")
+        return
+
+    print("\n" + "=" * 60)
+    print("STEP 2/3: Merging business metadata")
+    print("=" * 60)
+    merge()
+
+    print("\n" + "=" * 60)
+    print("STEP 3/3: Writing bootstrap data (domains, glossary, examples, rules, patterns)")
+    print("=" * 60)
+    write_bootstrap_data()
+
+    print("\n" + "=" * 60)
+    print("FULL REBUILD COMPLETE")
+    print("=" * 60)
+    print(f"Restart the server for changes to take effect.")
+
+
 if __name__ == "__main__":
     import sys
     if len(sys.argv) > 1 and sys.argv[1] == "merge":
         merge()
+    elif len(sys.argv) > 1 and sys.argv[1] == "bootstrap":
+        write_bootstrap_data()
+    elif len(sys.argv) > 1 and sys.argv[1] == "full-rebuild":
+        full_rebuild()
     else:
         generate_from_db()
