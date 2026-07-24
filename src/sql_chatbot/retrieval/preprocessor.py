@@ -86,7 +86,7 @@ class QueryPreprocessor:
         return is_count and not has_specific
 
     @staticmethod
-    def has_qword(word: str, q_words: set[str]) -> bool:
+    def _word_matches_query(word: str, q_words: set[str]) -> bool:
         return word in q_words or (word + "s") in q_words or (len(word) > 3 and word.endswith("s") and word[:-1] in q_words)
 
     @staticmethod
