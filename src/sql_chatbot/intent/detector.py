@@ -2,7 +2,9 @@ import json
 import re
 
 from sql_chatbot.config import LLM_PROVIDER, GROQ_API_KEY
-from sql_chatbot.generation.llm_client import generate_sql
+from sql_chatbot.generation.llm_client import call_llm
+
+_JSON_EXTRACT = re.compile(r"```(?:json)?\s*([\s\S]*?)\s*```", re.I)
 
 
 INTENT_RULES = [
@@ -59,8 +61,9 @@ def detect_intent_llm(query: str) -> dict | None:
     if not _llm_available():
         return None
     try:
-        raw = generate_sql(INTENT_PROMPT.format(query=query))
-        raw = raw.strip().strip("```json").strip("```").strip()
+        raw = call_llm(INTENT_PROMPT.format(query=query))
+        m = _JSON_EXTRACT.search(raw)
+        raw = m.group(1) if m else raw.strip()
         data = json.loads(raw)
         if "entity" in data and data["entity"]:
             data["source"] = "llm"
