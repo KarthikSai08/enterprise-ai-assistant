@@ -1,7 +1,8 @@
 from rank_bm25 import BM25Okapi
-
+import logging
 from sql_chatbot.retrieval.tokenizer import SQLTokenizer
 
+logger = logging.getLogger(__name__)
 
 class BM25:
     def __init__(self, tokenizer=None):
