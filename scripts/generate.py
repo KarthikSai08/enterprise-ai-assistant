@@ -6,13 +6,13 @@ from pathlib import Path
 import yaml
 from dotenv import load_dotenv
 
-from sql_chatbot.scripts.metadata_data import TABLE_META, COLUMN_META as _RAW_COLUMN_META, ACTIVE_ALIASES
-from sql_chatbot.scripts.kb_bootstrap_data import (
+from metadata_data import TABLE_META, COLUMN_META as _RAW_COLUMN_META, ACTIVE_ALIASES
+from kb_bootstrap_data import (
     DOMAINS_DATA, GLOSSARY_DATA, EXAMPLES_DATA,
     BUSINESS_RULES_DATA, SQL_PATTERNS_DATA, STATS_DATA,
 )
 
-load_dotenv(Path(__file__).resolve().parent.parent.parent.parent / ".env")
+load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
 SERVER = os.getenv("DB_SERVER", "")
 DATABASE = os.getenv("DB_NAME", "")
@@ -21,7 +21,7 @@ PASSWORD = os.getenv("DB_PASS", "")
 TRUSTED = os.getenv("DB_TRUSTED", "true").lower() in ("true", "1", "yes")
 SCHEMA = os.getenv("DB_SCHEMA", "dbo")
 
-BASE = Path(__file__).resolve().parent.parent.parent.parent / "knowledge_base"
+BASE = Path(__file__).resolve().parent.parent / "knowledge_base"
 
 COLUMN_META = dict(_RAW_COLUMN_META)
 
@@ -333,12 +333,6 @@ def extract_index_info(conn, schema: str, table_name: str) -> dict:
     return {"filterable": filterable, "groupable": groupable}
 
 
-def derive_display_name_from_table(table_name: str) -> str:
-    s = re.sub(r"([a-z])([A-Z])", r"\1 \2", table_name)
-    s = re.sub(r"([A-Z]+)([A-Z][a-z])", r"\1 \2", s)
-    return s.strip()
-
-
 # ---------------------------------------------------------------------------
 # Auto-fill helpers — fill empty metadata fields for columns not in COLUMN_META
 # ---------------------------------------------------------------------------
@@ -466,7 +460,6 @@ def _infer_role(col_name: str) -> str | None:
 def _auto_fill_column(col_name: str, datatype: str, role: str, existing: dict) -> dict:
     """Fill any empty metadata fields for a column with auto-derived values."""
     out = dict(existing)
-    # Infer better role if current role is "attribute"
     if role == "attribute" or role == "":
         inferred = _infer_role(col_name)
         if not inferred and out.get("is_join_key"):
@@ -502,7 +495,7 @@ def build_table_yaml(table_name: str, columns: list[dict], pk_cols: set[str],
 
     return {
         "table_name": table_name,
-        "display_name": derive_display_name_from_table(table_name),
+        "display_name": _derive_display_name(table_name),
         "domain": "",
         "module": "",
         "description": f"Table {table_name} from database.",
@@ -546,7 +539,7 @@ def build_column_yaml(table_name: str, columns: list[dict], pk_cols: set[str],
             "is_join_key": is_fk,
             "filterable": col_name in filterable_set or is_fk,
             "groupable": col_name in groupable_set or is_pk,
-            "aggregatable": False,
+            "aggregatable": len(agg_allowed) > 0,
             "aggregations_allowed": agg_allowed,
             "search_keywords": [],
             "common_user_intents": [],
@@ -742,14 +735,16 @@ def write_bootstrap_data():
 
     # Stats — compute from actual data
     table_count = len(list((BASE / "tables").glob("*.yaml")))
-    total_cols = sum(len(TABLE_META[t].get("important_columns", [])) + len(TABLE_META[t].get("business_metrics", [])) for t in TABLE_META)
+    total_cols = 0
+    for tname in TABLE_META:
+        tbl_yaml = _read_yaml(BASE / "tables" / f"{tname}.yaml")
+        total_cols += len(tbl_yaml.get("columns", []))
     stats = {
         "tables_count": len(TABLE_META),
         "total_columns": total_cols,
         "total_foreign_keys": len([j for j in _read_yaml(BASE / "joins" / "joins.yaml").get("joins", [])]),
         "total_keywords": sum(len(m.get("search_keywords", [])) for m in TABLE_META.values()),
         "total_intents": sum(len(m.get("common_user_intents", [])) for m in TABLE_META.values()),
-        "total_joins": len([j for j in _read_yaml(BASE / "joins" / "joins.yaml").get("joins", [])]),
         "total_domains": len(DOMAINS_DATA),
         "total_rules": len(BUSINESS_RULES_DATA),
         "total_glossary_terms": len(GLOSSARY_DATA),
@@ -771,8 +766,8 @@ def full_rebuild():
         print(f"\nERROR: Could not extract schema from database: {e}")
         print()
         print("If your database is not available, you can still run:")
-        print("  python -m sql_chatbot.scripts.generate merge     # enrich metadata")
-        print("  python -m sql_chatbot.scripts.generate bootstrap # write bootstrap files")
+        print("  python scripts/generate.py merge     # enrich metadata")
+        print("  python scripts/generate.py bootstrap # write bootstrap files")
         print()
         print("Make sure knowledge_base/ already has table/column YAMLs from a prior extract.")
         return
