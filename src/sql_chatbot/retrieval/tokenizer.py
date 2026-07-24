@@ -68,5 +68,6 @@ class SQLTokenizer:
 
         if self.remove_stopwords:
             raw_full = [t for t in raw_full if t not in STOPWORDS or len(t) == 1]
+            decomp = [t for t in decomp if t not in STOPWORDS or len(t) == 1]
 
         return raw_full + decomp
