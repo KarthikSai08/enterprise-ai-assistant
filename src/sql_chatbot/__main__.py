@@ -2,7 +2,9 @@ from sql_chatbot.config import LLM_PROVIDER, GROQ_API_KEY
 from sql_chatbot.metadata.loader import build
 from sql_chatbot.retrieval.engine import Retriever
 from sql_chatbot.generation.pipeline import run_sql_with_answer
+import logging
 
+logger = logging.getLogger(__name__)
 
 def _llm_available() -> bool:
     if LLM_PROVIDER == "groq":
@@ -11,7 +13,7 @@ def _llm_available() -> bool:
 
 
 def print_result(result, retriever=None):
-    if result.get("relevant") is False:
+    if result.get("has_context") is False:
         print(f"  {result.get('message', 'No relevant context found.')}")
         return
 
@@ -32,17 +34,17 @@ def print_result(result, retriever=None):
             meaning = j.get("meaning", "")
             print(f"    {on}  ({meaning})" if meaning else f"    {on}")
 
-    cols_fetched = ", ".join(result.get("columns_fetched", [])[:10]) or "-"
+    cols_fetched = ", ".join(result.get("summary_columns", [])[:10]) or "-"
     print(f"\n  Tables: {result['table_count']} | Columns: {cols_fetched} | Latency: {result['latency_ms']}ms")
 
     if result.get("confidence") is not None:
         print(f"  Confidence: {result['confidence']:.4f}")
 
-    if result.get("relevant") and retriever:
+    if result.get("has_context") and retriever:
         if retriever.db_connected:
             print("\n[Bot] >>> Generating SQL...")
             try:
-                corrected_query = result.get("normalized", result["query"])
+                corrected_query = result["query"]
                 sql_result = run_sql_with_answer(corrected_query, result)
                 if sql_result.get("not_supported"):
                     msg = sql_result.get("error") or "This question isn't answerable from the database."
@@ -92,7 +94,7 @@ def interactive(retriever):
             for name, t in sorted(retriever.tables.items()):
                 print(
                     f"{name:<35}{t['domain']:<15}"
-                    f"{len(t['columns']):<6}{len(t['keywords'])}"
+                    f"{len(t['columns']):<6}{len(t['all_search_terms'])}"
                 )
             continue
 

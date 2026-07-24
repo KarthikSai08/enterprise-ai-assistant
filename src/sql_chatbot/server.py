@@ -33,13 +33,14 @@ class SearchRequest(BaseModel):
 
 class SearchResponse(BaseModel):
     query: str
-    relevant: bool
+    has_context: bool
     message: str | None = None
     results: list[dict] = []
     joins: list[dict] = []
     tables_count: int = 0
     latency_ms: float = 0.0
     confidence: float = 0.0
+    summary_columns: list[str] = []
     sql: str | None = None
     row_count: int = 0
     answer: str | None = None
@@ -82,8 +83,8 @@ async def search(req: SearchRequest):
     sql = None
     row_count = 0
     answer = None
-    if result.get("relevant") and retriever.db_connected:
-        corrected_query = result.get("normalized", result["query"])
+    if result.get("has_context") and retriever.db_connected:
+        corrected_query = result["query"]
         sql_result = await asyncio.to_thread(
             run_sql_with_answer, corrected_query, result
         )
@@ -94,13 +95,14 @@ async def search(req: SearchRequest):
     latency = round((time.perf_counter() - t0) * 1000, 1)
     return SearchResponse(
         query=result.get("query", req.query),
-        relevant=result.get("relevant", False),
+        has_context=result.get("has_context", False),
         message=result.get("message"),
         results=result.get("results", []),
         joins=result.get("joins", []),
         tables_count=result.get("table_count", 0),
         latency_ms=result.get("latency_ms", latency),
         confidence=result.get("confidence", 0.0),
+        summary_columns=result.get("summary_columns", []),
         sql=sql,
         row_count=row_count,
         answer=answer,

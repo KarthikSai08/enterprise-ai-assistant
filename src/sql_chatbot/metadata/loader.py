@@ -116,6 +116,8 @@ def _merge_table_and_columns(table_data: dict, col_data: dict) -> dict:
         all_keywords.append(c["display_name"].lower())
         for alias in c["aliases"]:
             all_keywords.append(alias.lower())
+        for kw in c.get("search_keywords", []):
+            all_keywords.append(kw.lower())
 
     text = "\n".join(p for p in parts if p)
 
@@ -138,7 +140,7 @@ def _merge_table_and_columns(table_data: dict, col_data: dict) -> dict:
         "common_filters": table_data.get("common_filters", []),
         "common_groupby": table_data.get("common_groupby", []),
         "columns": cols,
-        "keywords": all_keywords,
+        "all_search_terms": all_keywords,
         "text": text,
     }
 

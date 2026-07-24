@@ -1,10 +1,7 @@
-import logging
 import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-
-logger = logging.getLogger(__name__)
 
 _env_path = Path(__file__).resolve().parent.parent.parent / ".env"
 if _env_path.exists():
@@ -49,12 +46,8 @@ DOMAIN_FILE_FALLBACK_FLOOR = 0.15
 CE_WEIGHT = 0.40
 RRF_WEIGHT = 0.60
 
-DOMAIN_BOOST_TOP_PRIMARY = 0.75
-DOMAIN_BOOST_TOP_NON_PRIMARY = 0.55
-DOMAIN_BOOST_OTHER_PRIMARY = 0.50
-DOMAIN_BOOST_OTHER_NON_PRIMARY = 0.40
-DOMAIN_BOOST_EXISTING_FLOOR = 0.85
-DOMAIN_BOOST_NEW_FLOOR = 0.65
+DOMAIN_BOOST_FACTOR = 0.60
+DOMAIN_BOOST_FLOOR = 0.40
 
 KEYWORD_SCORE_PER_MATCH = 1.00
 KEYWORD_NULL_TABLE_BASE = 0.01
@@ -90,13 +83,13 @@ DB_SERVER = os.getenv("DB_SERVER", "")
 DB_NAME = os.getenv("DB_NAME", "")
 DB_USER = os.getenv("DB_USER", "")
 DB_PASS = os.getenv("DB_PASS", "")
-DB_TRUSTED = os.getenv("DB_TRUSTED", "true").lower() in ("true", "1", "yes")
+DB_USE_WINDOWS_AUTH = os.getenv("DB_USE_WINDOWS_AUTH", os.getenv("DB_TRUSTED", "true")).lower() in ("true", "1", "yes")
 DB_SCHEMA = os.getenv("DB_SCHEMA", "dbo")
 
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5-coder:7b")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama3-70b-8192")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "groq")
 
 AGGREGATION_TYPES = {
