@@ -13,7 +13,7 @@ def build_context_str(result: dict) -> str:
         desc = r.get("description", "")[:120]
         domain = r.get("domain", "")
 
-        raw_cols = r.get("columns", []) or r.get("all_columns", [])[:8]
+        raw_cols = r.get("columns", []) or r.get("all_columns", [])[:20]
         safe_cols = [c for c in raw_cols if not is_sensitive_column(c)]
 
         annotated = []
