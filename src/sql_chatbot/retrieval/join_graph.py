@@ -55,15 +55,59 @@ class JoinGraph:
         for i, a in enumerate(names):
             for b in names[i + 1:]:
                 path_edges = self.bfs_path(a, b, max_depth)
-                if path_edges:
-                    path_tables = set()
-                    for edge in path_edges:
-                        path_tables.add(edge["from"])
-                        path_tables.add(edge["to"])
-                    for node in path_tables:
-                        if node in candidate_names:
-                            bridges.add(node)
-        return bridges
+                if not path_edges:
+                    continue
+                for edge in path_edges:
+                    bridges.add(edge["from"])
+                    bridges.add(edge["to"])
+        return bridges - candidate_names
+
+    _GENERIC_BRIDGE_DOMAINS = {"geography", "reference", "organization"}
+
+    def find_filter_bridge_tables(self, query: str, result_tables: set, domains: list[str] | None = None, max_depth: int = 2) -> dict:
+        """Returns {table_name: hop_distance} for tables not already in
+        result_tables whose column sample_values match the query text,
+        reachable via FK hops from a result table. Expansion is restricted
+        to the query's matched domain(s) plus generic bridge domains
+        (Geography/Reference/Organization) to avoid wandering into
+        unrelated domains through widely-shared reference tables."""
+        ql = query.lower()
+        allowed = {d.lower() for d in (domains or [])} | self._GENERIC_BRIDGE_DOMAINS
+        to_add: dict[str, int] = {}
+
+        start_tables = {
+            t for t in result_tables
+            if self.tables.get(t, {}).get("domain", "").lower() in allowed
+        } or set(result_tables)
+
+        for start in start_tables:
+            visited = {start}
+            queue = deque([[start]])
+            while queue:
+                path = queue.popleft()
+                if len(path) - 1 >= max_depth:
+                    continue
+                for neighbor in self.fk_graph.get(path[-1], {}):
+                    if neighbor in visited:
+                        continue
+                    visited.add(neighbor)
+                    tbl_data = self.tables.get(neighbor, {})
+                    tbl_domain = tbl_data.get("domain", "").lower()
+                    if tbl_domain and tbl_domain not in allowed:
+                        continue
+                    new_path = path + [neighbor]
+                    matched = any(
+                        str(v).lower() in ql
+                        for c in tbl_data.get("columns", [])
+                        for v in c.get("sample_values", [])
+                    )
+                    if matched:
+                        for i, hop_tbl in enumerate(new_path[1:], start=1):
+                            if hop_tbl not in result_tables:
+                                to_add[hop_tbl] = min(to_add.get(hop_tbl, i), i)
+                    else:
+                        queue.append(new_path)
+        return to_add
 
     def match_joins(self, query: str, table_names: list[str]) -> list[dict]:
         ql = query.lower()
