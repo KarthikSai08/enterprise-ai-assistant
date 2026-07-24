@@ -1,6 +1,5 @@
 import re
 import numpy as np
-
 from sql_chatbot.config import DOMAIN_SIM_MIN_ABS, DOMAIN_SIM_GAP, DOMAIN_FILE_FALLBACK_FLOOR
 
 class DomainDetector:
@@ -51,7 +50,7 @@ class DomainDetector:
             return None
         ranked = sorted(filtered.items(), key=lambda x: -x[1])
         matched = [d for d, _ in ranked]
-        return self._resolve_sales_purchase(matched)
+        return matched
 
     def _match_from_keywords(self, query: str) -> list[str]:
         ql = query.lower()
@@ -79,7 +78,6 @@ class DomainDetector:
         ranked = sorted(scores.items(), key=lambda x: -x[1])
         threshold = ranked[0][1] * 0.5
         matched = [d for d, s in ranked if s >= threshold]
-        matched = self._resolve_sales_purchase(matched)
         return matched if matched else [d for d, _ in ranked[:1]]
 
     def _match_from_tables(self, query: str) -> list[str]:
@@ -89,21 +87,13 @@ class DomainDetector:
             domain = t.get("domain", "")
             if not domain:
                 continue
-            for kw in t.get("search_keywords", []):
+            for kw in t.get("all_search_terms", []):
                 if kw.lower() in ql:
                     domain_scores[domain] = domain_scores.get(domain, 0) + 1
         if not domain_scores:
             return []
         ranked = sorted(domain_scores.items(), key=lambda x: -x[1])
         return [d for d, _ in ranked[:3]]
-
-    @staticmethod
-    def _resolve_sales_purchase(matched: list[str]) -> list[str]:
-        if "sales" not in matched or "purchase" not in matched:
-            return matched
-        if "purchase" in matched and "sales" in matched:
-            matched = [d for d in matched if d != "purchase"] + ["purchase"]
-        return matched
 
     def get_domain_table_set(self, domains: list[str]) -> set[str]:
         result = set()
