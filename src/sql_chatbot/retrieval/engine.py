@@ -3,38 +3,19 @@ import re
 import time
 
 from sql_chatbot.config import (
-    GENERIC_COLUMN_NAMES,
-    AGGREGATION_TYPES,
-    SCORE_GAP_FACTOR,
-    SCORE_THRESHOLD,
-    KEYWORD_SCORE_THRESHOLD,
-    KEYWORD_SCORE_PER_MATCH,
-    KEYWORD_NULL_TABLE_BASE,
-    STOPWORDS,
-    TOP_K,
-    RRF_K,
-    COLUMN_RRF_K,
-    COLUMN_TOP_K,
-    CANDIDATE_POOL_MULTIPLIER,
-    CANDIDATE_POOL_MIN,
-    RRF_K_MULTIPLIER,
-    RRF_K_MIN,
-    RERANKER_K_MULTIPLIER,
-    RERANKER_K_MIN,
-    CE_WEIGHT,
-    RRF_WEIGHT,
-    DOMAIN_BOOST_TOP_PRIMARY,
-    DOMAIN_BOOST_TOP_NON_PRIMARY,
-    DOMAIN_BOOST_OTHER_PRIMARY,
-    DOMAIN_BOOST_OTHER_NON_PRIMARY,
-    DOMAIN_BOOST_EXISTING_FLOOR,
-    DOMAIN_BOOST_NEW_FLOOR,
-    DB_SERVER,
-    DB_NAME,
-    DB_USER,
-    DB_PASS,
-    DB_TRUSTED,
-    DB_SCHEMA,
+    GENERIC_COLUMN_NAMES,AGGREGATION_TYPES,
+    SCORE_GAP_FACTOR,SCORE_THRESHOLD,
+    KEYWORD_SCORE_THRESHOLD,KEYWORD_SCORE_PER_MATCH,
+    KEYWORD_NULL_TABLE_BASE,STOPWORDS,
+    TOP_K,RRF_K,
+    COLUMN_RRF_K,COLUMN_TOP_K,
+    CANDIDATE_POOL_MULTIPLIER,CANDIDATE_POOL_MIN,
+    RRF_K_MULTIPLIER,RRF_K_MIN,
+    RERANKER_K_MULTIPLIER,RERANKER_K_MIN,
+    CE_WEIGHT,RRF_WEIGHT,
+    DOMAIN_BOOST_FACTOR,DOMAIN_BOOST_FLOOR,
+    DB_SERVER,DB_NAME,DB_USER,
+    DB_PASS, DB_USE_WINDOWS_AUTH,DB_SCHEMA,
 )
 from sql_chatbot.metadata.loader import build
 from sql_chatbot.retrieval.bm25 import BM25
@@ -60,7 +41,6 @@ def _configure_logging():
 
 _configure_logging()
 
-
 class Retriever:
     def __init__(self, data=None):
         if data is None:
@@ -73,7 +53,6 @@ class Retriever:
         self.glossary = data.get("glossary", {})
         self.rules = data.get("rules", [])
         self.column_texts = data.get("column_texts", {})
-
         self.join_graph = JoinGraph(self.joins, self.tables)
 
         texts = {name: t["text"] for name, t in self.tables.items()}
@@ -92,6 +71,7 @@ class Retriever:
             logger.info("Indexing BM25 columns...")
             self.bm25_columns = BM25()
             self.bm25_columns.index(self.column_texts)
+
             logger.info("Indexing ChromaDB columns...")
             self.vector.index_columns(self.column_texts)
         else:
@@ -108,10 +88,10 @@ class Retriever:
         if DB_SERVER and DB_NAME:
             import pyodbc
             try:
-                if DB_TRUSTED:
-                    cs = f"DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={DB_SERVER};DATABASE={DB_NAME};Trusted_Connection=yes;"
+                if DB_USE_WINDOWS_AUTH:
+                    cs = f"DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={DB_SERVER};DATABASE={DB_NAME};Trusted_Connection=yes;TrustServerCertificate=yes;"
                 else:
-                    cs = f"DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={DB_SERVER};DATABASE={DB_NAME};UID={DB_USER};PWD={DB_PASS};"
+                    cs = f"DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={DB_SERVER};DATABASE={DB_NAME};UID={DB_USER};PWD={DB_PASS};TrustServerCertificate=yes;"
                 conn = pyodbc.connect(cs, timeout=10)
                 cursor = conn.cursor()
                 cursor.execute("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_TYPE = 'BASE TABLE'", DB_SCHEMA)
@@ -135,13 +115,14 @@ class Retriever:
                 if len(cw) >= 3:
                     terms.add(cw)
             terms.add(re.sub(r"[^a-z0-9]", "", t["name"].lower()))
-            for kw in t.get("search_keywords", []):
+            for kw in t.get("all_search_terms", []):
                 terms.add(re.sub(r"[^a-z0-9]", "", kw.lower()))
             for intent in t.get("common_user_intents", []):
                 for w in intent.lower().split():
                     cw = re.sub(r"[^a-z0-9]", "", w)
                     if len(cw) >= 3:
                         terms.add(cw)
+
         for col_key, col_text in self.column_texts.items():
             for w in col_text.lower().split():
                 cw = re.sub(r"[^a-z0-9]", "", w)
@@ -151,6 +132,7 @@ class Retriever:
             if "." in col_key:
                 col_name = col_key.split(".", 1)[1]
                 terms.add(re.sub(r"[^a-z0-9]", "", col_name))
+
         for t in self.tables.values():
             for c in t.get("columns", []):
                 for val in c.get("sample_values", []):
@@ -158,6 +140,7 @@ class Retriever:
                         cw = re.sub(r"[^a-z0-9]", "", w)
                         if len(cw) >= 3:
                             terms.add(cw)
+
         for dn, dd in self.domains.items():
             terms.add(dn.lower())
             for w in dd.get("description", "").lower().split():
@@ -166,6 +149,7 @@ class Retriever:
                     terms.add(cw)
             for kw in dd.get("trigger", []):
                 terms.add(re.sub(r"[^a-z0-9]", "", kw.lower()))
+
         for term in self.glossary:
             terms.add(re.sub(r"[^a-z0-9]", "", term.lower()))
             syns = self.glossary[term]
@@ -195,17 +179,18 @@ class Retriever:
         domains = self.domain_detector.detect(corrected, query_vec)
         query_type = self.preprocessor.classify_query(qn, domains)
 
-        if query_type == "simple_agg":
-            k = 3
-        elif query_type == "ambiguous":
-            k = 2
-        else:
+        logger.info(query_type)
+        if query_type == "ambiguous":
             k = 5
+        else:
+            k = 3
 
         candidate_pool = max(k * CANDIDATE_POOL_MULTIPLIER, CANDIDATE_POOL_MIN)
         rrf_k = max(k * RRF_K_MULTIPLIER, RRF_K_MIN)
         reranker_k = max(k * RERANKER_K_MULTIPLIER, RERANKER_K_MIN)
 
+        logger.info(candidate_pool)
+        
         bm = self.bm25.search(qn, candidate_pool)
         vc = self.vector.search_tables(top_k=TOP_K, query_vec=query_vec)
 
@@ -216,14 +201,13 @@ class Retriever:
             rrf[name] = rrf.get(name, 0) + 1 / (RRF_K + rank + 1)
 
         max_rrf = max(rrf.values()) if rrf else 0.50
-        q_words_domain = set(ql.lower().split())
-        for rank_idx, dn in enumerate(domains):
-            is_top_domain = rank_idx == 0
+        q_words_domain = {w for w in ql.lower().split() if w not in STOPWORDS}
+        for dn in domains:
             dm = self.domains.get(dn, {})
             for t in dm.get("primary", []) + dm.get("support", []):
                 is_already_in_rrf = t in rrf
                 tbl_data = self.tables.get(t, {})
-                tbl_kws = set(k.lower() for k in tbl_data.get("search_keywords", []))
+                tbl_kws = set(k.lower() for k in tbl_data.get("all_search_terms", []) if len(k) > 2)
                 tbl_name_parts = set(t.lower().replace("tbl_", "").replace("_", " ").split())
                 sample_vals = set()
                 for c in tbl_data.get("columns", []):
@@ -243,19 +227,10 @@ class Retriever:
                 )
                 if not has_overlap:
                     continue
-                is_primary = t in dm.get("primary", [])
-                if is_top_domain and is_primary:
-                    floor = DOMAIN_BOOST_TOP_PRIMARY
-                elif is_top_domain:
-                    floor = DOMAIN_BOOST_TOP_NON_PRIMARY
-                elif is_primary:
-                    floor = DOMAIN_BOOST_OTHER_PRIMARY
-                else:
-                    floor = DOMAIN_BOOST_OTHER_NON_PRIMARY
                 if is_already_in_rrf:
-                    rrf[t] = max(rrf[t], max_rrf * DOMAIN_BOOST_EXISTING_FLOOR, floor)
+                    rrf[t] = max(rrf[t], max_rrf * DOMAIN_BOOST_FACTOR, DOMAIN_BOOST_FLOOR)
                 else:
-                    rrf[t] = max(max_rrf * DOMAIN_BOOST_NEW_FLOOR, floor)
+                    rrf[t] = max(max_rrf * DOMAIN_BOOST_FACTOR, DOMAIN_BOOST_FLOOR)
 
         search_weights = {
             name: tbl.get("search_weight", 5) / 5
@@ -266,7 +241,7 @@ class Retriever:
         keyword_hit = False
         keyword_scores = {}
         for name, tbl in self.tables.items():
-            kws = [k.lower() for k in tbl.get("keywords", []) if len(k) > 2]
+            kws = [k.lower() for k in tbl.get("all_search_terms", []) if len(k) > 2]
             sample_vals = set()
             for c in tbl.get("columns", []):
                 for v in c.get("sample_values", []):
@@ -289,7 +264,7 @@ class Retriever:
                             continue
                         if w in qw:
                             matched_words.add(w)
-                        elif any(wq.startswith(w) or w.startswith(wq) for wq in qw):
+                        elif any(wq.startswith(w) or w.startswith(wq) for wq in qw if len(wq) >= 3):
                             matched_words.add(w)
             if matched_words:
                 keyword_scores[name] = len(matched_words)
@@ -314,11 +289,11 @@ class Retriever:
                 "intent": intent_info,
                 "normalized": qn,
                 "domains": domains,
-                "relevant": False,
+                "has_context": False,
                 "message": "I don't have relevant context to answer this question.",
                 "results": [],
                 "joins": [],
-                "columns_fetched": [],
+                "summary_columns": [],
                 "table_count": 0,
                 "_debug": "",
                 "latency_ms": round((time.perf_counter() - t0) * 1000, 1),
@@ -331,7 +306,10 @@ class Retriever:
             )
         except Exception as e:
             logger.warning("Reranker failed (%s), falling back to BM25-only results", e)
-            reranked = [(name, rrf.get(name, 0)) for name, _ in candidates[:reranker_k]]
+            reranked = [
+                (name, min(1.0, rrf.get(name, 0) / max(rrf.values(), default=1.0)))
+                for name, _ in candidates[:reranker_k]
+            ]
 
         max_rrf_val = max(rrf.values()) if rrf else 1.0
         reranked = [
@@ -347,11 +325,11 @@ class Retriever:
                 "intent": intent_info,
                 "normalized": qn,
                 "domains": domains,
-                "relevant": False,
+                "has_context": False,
                 "message": "I'm not confident enough to answer this. Can you rephrase or add more detail?",
                 "results": [],
                 "joins": [],
-                "columns_fetched": [],
+                "summary_columns": [],
                 "table_count": 0,
                 "_debug": "",
                 "latency_ms": round((time.perf_counter() - t0) * 1000, 1),
@@ -430,6 +408,40 @@ class Retriever:
                 "estimated_rows": t.get("estimated_rows", 0),
             })
 
+        result_table_names = {r["table"] for r in results}
+        bridge_hits = self.join_graph.find_filter_bridge_tables(query, result_table_names, domains, max_depth=2)
+        bridge_tables = sorted(bridge_hits, key=lambda t: (bridge_hits[t], t))[:4]
+        for name in bridge_tables:
+            t = self.tables.get(name, {})
+            if not t:
+                continue
+            cols = self._match_columns(query, name, t.get("columns", [])) or [c["name"] for c in t.get("columns", [])[:3]]
+            column_samples = {}
+            for c in t.get("columns", []):
+                vals = c.get("sample_values", [])
+                if vals:
+                    column_samples[c["name"]] = vals
+            results.append({
+                "rank": len(results) + 1,
+                "table": name,
+                "display_name": t.get("display_name", ""),
+                "score": 0.0,
+                "domain": t.get("domain", ""),
+                "description": t.get("description", ""),
+                "columns": cols[:col_cap],
+                "all_columns": [c["name"] for c in t.get("columns", [])],
+                "column_samples": column_samples,
+                "important_columns": t.get("important_columns", []),
+                "common_filters": t.get("common_filters", []),
+                "common_groupby": t.get("common_groupby", []),
+                "suggested_joins": [j for j in self.joins if j["from"] == name or j["to"] == name][:3],
+                "matching_rules": [],
+                "primary_key": t.get("primary_key", ""),
+                "foreign_keys": t.get("foreign_keys", []),
+                "estimated_rows": t.get("estimated_rows", 0),
+                "bridge": True,
+            })
+
         matched_ops = []
         for kw, label in AGGREGATION_TYPES.items():
             if kw in ql:
@@ -477,16 +489,16 @@ class Retriever:
             "domains": domains,
             "_reason": reason_str,
             "_debug": debug_str,
-            "relevant": True,
+            "has_context": True,
             "results": results,
             "joins": joins,
-            "columns_fetched": all_cols,
+            "summary_columns": all_cols,
             "table_count": len(results),
             "latency_ms": round((time.perf_counter() - t0) * 1000, 1),
             "query_type": query_type,
             "confidence": confidence,
         }
-
+    
     def _retrieve_columns(self, query: str, candidate_tables: list[str], top_k=COLUMN_TOP_K, query_vec=None):
         bm = self.bm25_columns.search(query, top_k * 3)
         vc = self.vector.search_columns(top_k=top_k * 3, query_vec=query_vec)
@@ -494,15 +506,21 @@ class Retriever:
         bm_f = [(k, s) for k, s in bm if k.split(".")[0] in candidate_set]
         vc_f = [(k, s) for k, s in vc if k.split(".")[0] in candidate_set]
         rrf = {}
+
         for rank, (name, _) in enumerate(bm_f):
             rrf[name] = rrf.get(name, 0) + 1 / (COLUMN_RRF_K + rank + 1)
         for rank, (name, _) in enumerate(vc_f):
             rrf[name] = rrf.get(name, 0) + 1 / (COLUMN_RRF_K + rank + 1)
         candidates = sorted(rrf.items(), key=lambda x: -x[1])[:top_k]
+
+        if not candidates:
+            return []
+        
         try:
             return self.reranker.rerank_columns(
                 query, candidates, self.column_texts, top_k, rrf
             )
+        
         except Exception as e:
             logger.warning("Column reranker failed (%s), falling back to RRF-only results", e)
             return candidates[:top_k]
@@ -513,6 +531,7 @@ class Retriever:
 
         if QueryPreprocessor.is_simple_count_query(query):
             found = []
+
             for c in columns:
                 name_lower = c["name"].lower()
                 if any(kw in name_lower for kw in ["id", "identifier", "name", "status", "code"]):
@@ -530,7 +549,7 @@ class Retriever:
                 display_parts = [p.strip().lower() for p in display.split("/")]
                 if any(p in ql for p in display_parts):
                     s += 8
-                elif any(QueryPreprocessor.has_qword(w, q_words) for p in display_parts for w in p.split()):
+                elif any(QueryPreprocessor._word_matches_query(w, q_words) for p in display_parts for w in p.split()):
                     s += 5
 
             desc = c.get("description", "")
@@ -539,12 +558,11 @@ class Retriever:
 
             aliases = c.get("aliases", [])
             s += sum(5 for a in aliases if a.lower() in ql)
-            if any(QueryPreprocessor.has_qword(w, q_words) for a in aliases for w in a.lower().split()):
+            if any(QueryPreprocessor._word_matches_query(w, q_words) for a in aliases for w in a.lower().split()):
                 s += 3
 
             col_syns = self.col_syns.get(f"{table_name}.{c['name']}", [])
             s += sum(5 for syn in col_syns if syn.lower() in ql)
-
             if c.get("aggregatable") and any(w in ql for w in ["total", "sum", "avg", "count", "amount", "revenue"]):
                 s += 2
 
