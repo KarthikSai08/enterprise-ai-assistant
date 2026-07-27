@@ -1,5 +1,7 @@
 import re
 import pyodbc
+import sqlglot
+from sqlglot import exp
 import logging
 from sql_chatbot.config import DB_SERVER, DB_NAME, DB_USER, DB_PASS, DB_USE_WINDOWS_AUTH
 
@@ -14,108 +16,53 @@ class SQLQueryExecutionError(Exception):
 class DBConnectionError(Exception):
     pass
 
-_SQL_KEYWORDS = frozenset(w.upper() for w in """
-    SELECT FROM WHERE AND OR NOT IN AS ON JOIN LEFT RIGHT INNER OUTER FULL CROSS
-    HASH SEMI ANTI SOME ANY TOP DISTINCT ORDER BY GROUP HAVING ASC DESC BETWEEN
-    LIKE IS NULL TRUE FALSE CASE WHEN THEN ELSE END EXISTS
-    UNION ALL INTERSECT EXCEPT WITH
-    COUNT SUM AVG MIN MAX OVER PARTITION ROW_NUMBER RANK DENSE_RANK NTILE LEAD LAG
-    FIRST_VALUE LAST_VALUE CUME_DIST PERCENT_RANK PERCENTILE_CONT PERCENTILE_DISC
-    GETDATE DATEADD DATEDIFF YEAR MONTH DAY DATEPART CAST CONVERT
-    SUBSTRING CHARINDEX LEN REPLACE UPPER LOWER TRIM ISNULL CONCAT
-    DATENAME FORMAT STUFF LEFT RIGHT
-    ABS ROUND CEILING FLOOR POWER IIF COALESCE NULLIF
-    ISNUMERIC ISDATE EOMONTH DATEFROMPARTS DATETIMEFROMPARTS
-    SIN COS TAN LOG SQRT PI EXP SIGN RAND CHOOSE
-    REVERSE REPLICATE SPACE PATINDEX STRING_AGG
-    TRY_CAST TRY_CONVERT TRY_PARSE
-    NEWID NEWSEQUENTIALID
-    SET DECLARE BEGIN END IF ELSE WHILE RETURN PRINT RAISERROR THROW
-    INSERT UPDATE DELETE MERGE DROP ALTER TRUNCATE CREATE EXEC EXECUTE
-    GRANT REVOKE DENY BACKUP RESTORE DBCC OPENROWSET OPENQUERY
-    BULK INSERT xp_cmdshell GO
-""".split())
-
-_HARMFUL_PATTERNS = re.compile(
-    r"\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|MERGE|EXEC(?:UTE)?|"
-    r"GRANT|REVOKE|CREATE|DECLARE|BACKUP|RESTORE|DBCC|"
-    r"BULK\s+INSERT|OPENROWSET|OPENQUERY|xp_cmdshell)\b",
-    re.IGNORECASE,
+_FORBIDDEN_STATEMENTS = (
+    exp.Insert, exp.Update, exp.Delete, exp.Drop, exp.Alter,
+    exp.Create, exp.Grant, exp.Command, exp.TruncateTable
 )
-
-_SQL_IDENTIFIER = re.compile(r'\b[a-zA-Z_][a-zA-Z0-9_]*\b')
-
 
 def check_not_supported(sql: str) -> None:
     if sql.strip().upper().startswith("NOT_SUPPORTED"):
         raise SQLValidationError("This question isn't something I can answer from the database.")
 
 
-def _build_alias_map(sql: str) -> dict[str, str]:
-    alias_map = {}
-    for m in re.finditer(
-        r'\b(?:FROM|JOIN)\s+(\w+(?:\.\w+)?)\s+(?:AS\s+)?(\w{1,30})\b',
-        sql, re.IGNORECASE
-    ):
-        table = m.group(1)
-        alias = m.group(2)
-        if (alias and alias.upper() not in _SQL_KEYWORDS and alias.upper() != table.upper()):
-            alias_map[alias.upper()] = table
-    return alias_map
+def _parse_single_select(sql: str) ->exp.Select:
+    try:
+        statements = [s for s in sqlglot.parse(sql, read= "tsql") if s is not None]
+    except Exception as e:
+        raise SQLValidationError(f"SQL failed to parse : {e}")
 
-def validate_columns(sql: str, valid_columns: set[str]) -> None:
-    no_strings = re.sub(r"'[^']*'", "", sql)
-    no_comments = re.sub(r"--.*$", "", no_strings, flags=re.MULTILINE)
+    if len(statements) == 0:
+        raise SQLValidationError("Empty SQL Statement")
+    if len(statements) > 1:
+        raise SQLValidationError("Only a single statement is allowed - no batch separators or semicolons")
 
-    alias_map = _build_alias_map(no_comments)
+    tree = statements[0]
 
-    qualified = re.findall(
-        r"\b(\w+)\.(\w+)\b",
-        no_comments
-    )
+    if isinstance(tree, _FORBIDDEN_STATEMENTS) or not isinstance(tree, exp.Select):
+        raise SQLValidationError("Only SELECT statements are allowed")
 
-    schema_qualified_tables = set()
-    for m in re.finditer(
-        r'\b(?:FROM|JOIN)\s+(\w+)\.(\w+)', 
-        no_comments, re.IGNORECASE
-    ):
-        schema_qualified_tables.add((m.group(1), m.group(2)))
+    if tree.find(exp.With):
+        raise SQLValidationError("CTEs (WITH .... AS) are not allowed")
+    if tree.find(exp.Union) or tree.find(exp.Intersect) or tree.find(exp.Except):
+        raise SQLValidationError("UNION/INTERSECT/EXCEPT are not allowed")
+    if tree.find(exp.Pivot):
+        raise SQLValidationError("PIVOT/UNPIVOT are not allowed")
 
-    for tbl, col in qualified:
-        if (tbl, col) in schema_qualified_tables:
-            continue
-        real_tbl = alias_map.get(tbl.upper(), tbl)
-        if f"{real_tbl}.{col}" not in valid_columns:
-            raise SQLValidationError(
-                f"Invalid column name '{real_tbl}.{col}' — "
-                "column does not exist in DATABASE CONTEXT."
-            )
+    return tree
 
-    # Validate only column-like identifiers, excluding SQL structure
-    table_names = set(
-        re.findall(
-            r"\b(?:FROM|JOIN)\s+(\w+)",
-            no_comments,
-            flags=re.IGNORECASE,
-        )
-    )
+def _validate_columns_ast(tree: exp.Select, valid_columns : set[str]) -> None:
+    lower_valid = {vc.lower() for vc in valid_columns}
 
-    identifiers = set(
-        _SQL_IDENTIFIER.findall(no_comments)
-    )
+    alias_to_table : dict[str, str] = {}
+    query_tables: set[str] = set()
+    for t in tree.find_all(exp.Table):
+        real_name = t.name
+        query_tables.add(real_name.lower())
+        if t.alias:
+            alias_to_table[t.alias.lower()] = real_name
 
-    ignored = {
-        token.upper()
-        for token in _SQL_KEYWORDS
-    }
-
-    ignored.update(
-        table.upper()
-        for table in table_names
-    )
-    ignored.update(
-        alias.upper()
-        for alias in alias_map.keys())
+    select_aliases = {a.alias.lower() for a in tree.find_all(exp.Alias) if a.alias}
 
     table_columns: dict[str, set[str]] = {}
     for vc in valid_columns:
@@ -123,96 +70,45 @@ def validate_columns(sql: str, valid_columns: set[str]) -> None:
             tbl, col = vc.split(".", 1)
             table_columns.setdefault(tbl.lower(), set()).add(col.lower())
 
-    query_tables = set()
-    for tn in table_names:
-        query_tables.add(tn.lower())
-    for alias, real_tbl in alias_map.items():
-        query_tables.add(real_tbl.lower())
-
-    scoped_unqualified_columns: set[str] = set()
+    scoped_unqualified: set[str] = set()
     for tbl in query_tables:
-        scoped_unqualified_columns.update(table_columns.get(tbl, set()))
-
-    col_aliases = set()
-    for m in re.finditer(
-        r'\bAS\s+(\w+)\b', no_comments, re.IGNORECASE
-    ):
-        col_aliases.add(m.group(1).lower())
-    ignored.update(a.upper() for a in col_aliases)
+        scoped_unqualified.update(table_columns.get(tbl, set()))
 
     hallucinated = []
+    for c in tree.find_all(exp.Column):
+        col_name = c.name
+        if col_name.lower() in select_aliases:
+            continue
 
-    for token in identifiers:
-        if token.upper() in ignored:
-            continue
-        if token.lower() in scoped_unqualified_columns:
-            continue
-        if token.isdigit():
-            continue
-        try:
-            float(token)
-            continue
-        except ValueError:
-            pass
+        table_ref = c.table
+        if table_ref:
+            real_tbl = alias_to_table.get(table_ref.lower(), table_ref)
+            if f"{real_tbl}.{col_name}".lower()not in lower_valid:
+                hallucinated.append(f"{real_tbl}.{col_name}")
+        else:
+            if col_name.lower() not in scoped_unqualified:
+                hallucinated.append(col_name)
 
-        hallucinated.append(token)
-        logger.warning("DEBUG SQL: %r", sql)
-        logger.warning("DEBUG ALIAS_MAP: %r", alias_map)
-        logger.warning("DEBUG SCOPED_COLS SAMPLE: %r", sorted(scoped_unqualified_columns)[:30])
-        logger.warning("DEBUG HALLUCINATED: %r", hallucinated)
     if hallucinated:
+        logger.warning("DEBUG SQL AST: %r", tree.sql(dialect="tsql"))
+        logger.warning("DEBUG HALLUCIATED : %r", hallucinated)
         raise SQLValidationError(
-            f"Invalid column names found in SQL: "
-            f"{', '.join(hallucinated[:5])}. "
-            "These do not exist in DATABASE CONTEXT."
+            f"Invalid column names found in SQL: {', '.join(hallucinated[:5])}. "
+            "These do not exist in DATABASE CONTEXT"
         )
+    
+def _cap_top(tree: exp.Select, max_rows: int = 100) -> str:
+    if not tree.args.get("limit"):
+        tree = tree.limit(max_rows)
+    return tree.sql(dialect = "tsql")
 
-def validate_and_cap(sql: str, max_rows: int = 100) -> str:
-    stripped = sql.strip()
-    if not stripped:
-        raise SQLValidationError("Empty SQL statement.")
+def validate_and_cap(sql: str, valid_columns: set[str] | None, max_rows: int = 100) -> str:
+    tree = _parse_single_select(sql)
+    if valid_columns is not None:
+        _validate_columns_ast(tree, valid_columns)
+    return _cap_top(tree, max_rows)
 
-    if _HARMFUL_PATTERNS.search(stripped):
-        raise SQLValidationError("Only SELECT statements are allowed.")
-
-    stripped = re.sub(
-        r"(?i)(\bSELECT\b.*?)\bTOP\b\s*\(?\s*(\d+)\s*\)?\s+DISTINCT\b",
-        r"\1DISTINCT TOP \2",
-        stripped,
-    )
-
-    upper = stripped.upper()
-    if not upper.startswith("SELECT"):
-        raise SQLValidationError("Only SELECT statements are allowed.")
-
-    has_top = "TOP " in upper or "TOP(" in upper
-
-    if not has_top:
-        insert_at = _find_top_insertion_point(stripped)
-        if insert_at:
-            kw = stripped[insert_at:].lstrip()
-            if kw and not kw.upper().startswith("TOP ") and not kw.upper().startswith("TOP("):
-                stripped = stripped[:insert_at] + f"TOP {max_rows} " + stripped[insert_at:]
-
-    return stripped
-
-
-def _find_top_insertion_point(sql: str) -> int | None:
-    stripped = sql.lstrip()
-    offset = len(sql) - len(stripped)
-    upper = stripped.upper()
-    if "SELECT " not in upper and "SELECT(" not in upper:
-        return None
-    idx = upper.find("SELECT")
-    idx += 6
-    while idx < len(stripped) and stripped[idx] in " \t\n\r":
-        idx += 1
-    if idx < len(stripped) and stripped[idx] == "(":
-        return None
-    return offset + idx
-
-
-def _get_connection():
+def _get_collection():
     if not DB_SERVER or not DB_NAME:
         raise DBConnectionError("Database not configured. Set DB_SERVER and DB_NAME in .env")
     if DB_USE_WINDOWS_AUTH:
@@ -227,27 +123,24 @@ def _get_connection():
             f"SERVER={DB_SERVER};DATABASE={DB_NAME};UID={DB_USER};PWD={DB_PASS};"
             f"TrustServerCertificate=yes;"
         )
-    return pyodbc.connect(cs, timeout=30)
-
+    return pyodbc.connect(cs, timeout=60)
 
 def execute_query(sql: str, valid_columns: set[str] | None = None, valid_tables: set[str] | None = None) -> dict:
-    safe_sql = validate_and_cap(sql)
-    check_not_supported(safe_sql)
-    if valid_columns is not None:
-        validate_columns(safe_sql, valid_columns)
+    check_not_supported(sql)
+    safe_sql = validate_and_cap(sql, valid_columns)
     try:
-        conn = _get_connection()
+        conn = _get_collection()
         cursor = conn.cursor()
         cursor.execute(safe_sql)
         columns = [desc[0] for desc in cursor.description] if cursor.description else []
         rows = [list(row) for row in cursor.fetchall()]
         conn.close()
         return {
-            "sql": safe_sql,
-            "columns": columns,
-            "rows": rows,
-            "row_count": len(rows),
-            "error": None,
+            "sql" : safe_sql,
+            "columns" : columns,
+            "rows" : rows,
+            "row_count" : len(rows),
+            "error" : None
         }
     except SQLValidationError:
         raise
