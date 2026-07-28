@@ -1,4 +1,5 @@
 import logging
+import random
 import time
 
 import requests
@@ -7,7 +8,7 @@ from sql_chatbot.config import OLLAMA_BASE_URL, OLLAMA_MODEL, GROQ_API_KEY, GROQ
 logger = logging.getLogger(__name__)
 
 
-def _call_ollama(prompt: str, model: str = None) -> str:
+def _call_ollama(prompt: str, model: str = None, max_retries: int = 2) -> str:
     payload = {
         "model": model or OLLAMA_MODEL,
         "prompt": prompt,
@@ -15,20 +16,33 @@ def _call_ollama(prompt: str, model: str = None) -> str:
         "options": {"temperature": 0.1, "num_predict": 1024},
     }
     url = OLLAMA_BASE_URL.rstrip("/") + "/api/generate"
-    try:
-        resp = requests.post(url, json=payload, timeout=60)
-        resp.raise_for_status()
-        return resp.json()["response"].strip()
-    except requests.ConnectionError:
-        raise RuntimeError(
-            f"Cannot reach Ollama at {OLLAMA_BASE_URL}. "
-            f"Make sure Ollama is running (run 'ollama serve' in terminal) "
-            f"and model '{model or OLLAMA_MODEL}' is pulled "
-            f"(run 'ollama pull {model or OLLAMA_MODEL}')"
-        ) from None
+    last_exc = None
+    for attempt in range(max_retries + 1):
+        try:
+            resp = requests.post(url, json=payload, timeout=30)
+            resp.raise_for_status()
+            data = resp.json()
+            if "response" not in data:
+                raise ValueError(f"Unexpected Ollama response format: {data}")
+            return data["response"].strip()
+        except requests.RequestException as e:
+            last_exc = e
+            if attempt < max_retries:
+                sleep_s = min(2 ** attempt + random.uniform(0, 1), 30)
+                logger.warning(
+                    "Ollama request failed (%s). Retrying in %.1fs... (attempt %d/%d)",
+                    e, sleep_s, attempt + 1, max_retries,
+                )
+                time.sleep(sleep_s)
+    raise RuntimeError(
+        f"Cannot reach Ollama at {OLLAMA_BASE_URL} after {max_retries + 1} attempts. "
+        f"Make sure Ollama is running (run 'ollama serve' in terminal) "
+        f"and model '{model or OLLAMA_MODEL}' is pulled "
+        f"(run 'ollama pull {model or OLLAMA_MODEL}')"
+    ) from last_exc
 
 
-def _call_groq(prompt: str, model: str = None, api_key: str = None, max_retries: int = 3) -> str:
+def _call_groq(prompt: str, model: str = None, api_key: str = None, max_retries: int = 1) -> str:
     key = api_key or GROQ_API_KEY
     if not key:
         raise ValueError("Groq API key not found. Set GROQ_API_KEY in .env")
@@ -46,7 +60,10 @@ def _call_groq(prompt: str, model: str = None, api_key: str = None, max_retries:
         )
         if resp.status_code != 429:
             resp.raise_for_status()
-            return resp.json()["choices"][0]["message"]["content"].strip()
+            data = resp.json()
+            if not data.get("choices"):
+                raise ValueError(f"Unexpected Groq response format: {data}")
+            return data["choices"][0]["message"]["content"].strip()
         if attempt < max_retries:
             retry_after = int(resp.headers.get("Retry-After", 10))
             logger.warning(
@@ -65,7 +82,7 @@ def _call_with_fallback(prompt: str, provider: str, groq_key: str | None, model:
     if provider == "groq":
         try:
             return _call_groq(prompt, model, groq_key)
-        except requests.RequestException as e:
+        except (requests.RequestException, RuntimeError) as e:
             logger.warning("Groq failed (%s) — falling back to Ollama", e)
             return _call_ollama(prompt, model)
     try:
