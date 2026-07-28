@@ -18,7 +18,7 @@ User Query
 │                    ┌─────────────────┼─────────────────┐              │
 │                    ▼                 ▼                  ▼             │
 │              BGE-M3 Dense       BM25 Sparse      Domain Centroids    │
-│              (ChromaDB)         (rank_bm25)      (cosine sim)        │
+│              (ChromaDB)          (bm25s)         (cosine sim)        │
 │                    │                 │                  │             │
 │                    └─────────┬───────┘                  │             │
 │                              ▼                          │             │
@@ -67,14 +67,18 @@ The retrieval pipeline transforms a raw natural-language query into a ranked lis
 | **Typo Correction** | `rapidfuzz.WRatio` against an indexed vocabulary of all table/column/keyword/domain terms | Handles misspellings and partial matches |
 | **Glossary Expansion** | Synonym-based term expansion from a curated business glossary | Bridges terminology gaps (e.g., "staff" → "employee") |
 | **Dense Retrieval** | `BAAI/bge-m3` embeddings stored in ChromaDB with cosine similarity | Captures semantic meaning beyond keyword overlap |
-| **Sparse Retrieval** | BM25Okapi on table description text | Ensures exact keyword matches are never missed |
+| **Sparse Retrieval** | BM25 (bm25s) on table description text | Ensures exact keyword matches are never missed |
 | **Reciprocal Rank Fusion** | Weighted combination of dense + sparse ranking | Balances precision (sparse) with recall (dense) |
 | **Domain Detection** | Cosine similarity against domain centroids + keyword rule matching | Identifies business context (Sales, HR, Finance, etc.) |
 | **Domain-Boosted Scoring** | Score floors applied per domain based on table role (primary/support) and domain rank | Ensures domain-relevant tables surface prominently |
 | **Keyword Scoring** | Multi-match scoring against table/column keywords + sample values with weight factors | Rewards tables with high keyword or known-value affinity |
 | **Cross-Encoder Reranking** | `BAAI/bge-reranker-v2-m3` for fine-grained relevance scoring | Re-ranks top candidates using a pairwise query-document model |
 | **Column Retrieval** | Separate BM25 + dense index per column, fused and reranked | Identifies specific columns relevant to the query |
+| **Column Priority Boost** | Important columns + query-matched columns (by name, alias, search keywords, sample values) promoted to front | Ensures filter columns survive the 10-column context cap |
+| **Entity Value Detection** | Indexed sample values matched against query text via substring + Jaro-Winkler | Detects filter values (e.g. "Mumbai" → dmn_City.cityName) for precise WHERE clauses |
 | **Join Matching** | BFS on the foreign-key graph to find join paths between candidate tables | Enables multi-table query construction |
+| **Bridge Table Expansion** | BFS from result tables to reachable filter-value tables via FK graph | Brings in lookup tables (e.g. dmn_City) needed for filter columns |
+| **Filter Bridge Detection** | Detects which bridge tables match query filter values and computes the shortest join path | Guides the LLM to the correct multi-hop join chain |
 
 All tunable parameters (candidate pool sizes, score thresholds, boost factors, weights) live in `src/sql_chatbot/config.py` — no code changes required for retrieval tuning.
 
@@ -82,7 +86,7 @@ All tunable parameters (candidate pool sizes, score thresholds, boost factors, w
 
 The retrieved schema context is assembled into a highly constrained prompt that instructs the LLM to produce safe, correct T-SQL:
 
-1. **Prompt Assembly** — The prompt (`generation/prompt.py:45-177`) enforces 20 strict rules:
+1. **Prompt Assembly** — The prompt (`generation/prompt.py`) enforces 25 strict rules:
    - Only `SELECT` statements — no DDL, DML, admin commands
    - No hallucinated tables, columns, or relationships
    - No sensitive data exposure (GST, PAN, Aadhaar, bank details, passwords, salary)
@@ -92,7 +96,10 @@ The retrieved schema context is assembled into a highly constrained prompt that 
    - Filters only on columns marked `filterable`
    - Proper `TOP (N)` / `DISTINCT TOP (N)` ordering
    - Anti-prompt-injection safeguards
+   - **Detected values rule** (Rule 24): If a value lives in a lookup/dimension table, use a JOIN through the FK — never query it directly as FROM
+   - **Multi-hop join rule** (Rule 25): When a filter requires a chain of 3+ tables, include ALL intermediate tables — never skip them to join directly
    - If any rule cannot be satisfied → returns `NOT_SUPPORTED`
+   - Bridge tables are excluded from the main table listing and shown under "FILTER PATHS" with their reachable join chain and filter columns, preventing the LLM from treating them as direct FROM/JOIN targets
 
 2. **SQL Generation** — Calls Groq (cloud API, default) or Ollama (local). Auto-fallbacks between providers if one fails. Configure via `LLM_PROVIDER` in `.env`.
 
@@ -121,11 +128,11 @@ pip install -e .
 
 ### Configuration
 
-Copy `.env.example` from the project root to `.env` and fill in your settings:
+Create a `.env` file in the project root and fill in your settings:
 
 ```bash
-cp .env.example .env
-# Then edit .env with your DB_SERVER, DB_NAME, and GROQ_API_KEY
+# Create .env with your DB_SERVER, DB_NAME, and GROQ_API_KEY
+# See the table below for all supported variables
 ```
 
 Supported environment variables:
@@ -149,22 +156,22 @@ Supported environment variables:
 The knowledge base is a set of YAML files that describe every table, column, foreign key relationship, and business domain. It is generated from two sources:
 
 1. **Live database schema** — extracted automatically from SQL Server
-2. **Hand-curated business metadata** — defined in `src/sql_chatbot/scripts/metadata_data.py` (table descriptions, search keywords, column aliases, domain mappings)
-3. **Bootstrap data** — domains, glossary, examples, business rules, and SQL patterns defined in `src/sql_chatbot/scripts/kb_bootstrap_data.py`
+2. **Hand-curated business metadata** — defined in `scripts/metadata_data.py` (table descriptions, search keywords, column aliases, domain mappings)
+3. **Bootstrap data** — domains, glossary, examples, business rules, and SQL patterns defined in `scripts/kb_bootstrap_data.py`
 
 ```bash
 # Full rebuild: extract from DB → merge metadata → write bootstrap files
-python -m sql_chatbot.scripts.generate full-rebuild
+python scripts/generate.py full-rebuild
 
 # Or run individual steps:
 # Step 1: Extract schema from SQL Server (run when DB schema changes)
-python -m sql_chatbot.scripts.generate
+python scripts/generate.py
 
 # Step 2: Merge business metadata with extracted schema (run after editing metadata_data.py)
-python -m sql_chatbot.scripts.generate merge
+python scripts/generate.py merge
 
 # Step 3: Write bootstrap files (domains, glossary, examples, etc.)
-python -m sql_chatbot.scripts.generate bootstrap
+python scripts/generate.py bootstrap
 ```
 
 > **Note:** The `merge` command reads `TABLE_META` and `COLUMN_META` from `metadata_data.py` and overwrites all YAML files in `knowledge_base/`. Hand-edits to YAML files will be lost on next merge — always edit `metadata_data.py` instead.
@@ -412,13 +419,21 @@ curl -s http://localhost:8000/search \
 │   │
 │   ├── retrieval/
 │   │   ├── engine.py              Main retrieval orchestrator — typo correction,
-│   │   │                           domain detection, fusion, boosting, ranking
+│   │   │                           domain detection, fusion, boosting, ranking,
+│   │   │                           column query-boost, bridge table expansion
 │   │   ├── vector.py              BGE-M3 dense embedding index via ChromaDB
-│   │   ├── bm25.py                BM25 sparse retrieval (rank_bm25)
-│   │   └── reranker.py            BGE Cross-Encoder reranker
+│   │   ├── bm25.py                BM25 sparse retrieval (bm25s)
+│   │   ├── reranker.py            BGE Cross-Encoder reranker
+│   │   ├── preprocessor.py        Query preprocessing — typo correction, glossary
+│   │   │                           expansion, value correction, query classification
+│   │   ├── domain_detector.py     Domain detection via semantic centroids + rules
+│   │   ├── join_graph.py          BFS-based join path finding + bridge table expansion
+│   │   ├── entity_value_extractor.py  Sample value detection for precise WHERE filters
+│   │   ├── value_filter_extractor.py  Numeric/date range extraction from query text
+│   │   └── tokenizer.py           SQL-aware tokenizer for BM25 indexing
 │   │
 │   ├── generation/
-│   │   ├── prompt.py              Prompt templates — SQL generation (20 rules)
+│   │   ├── prompt.py              Prompt templates — SQL generation (25 rules)
 │   │   │                           and answer generation
 │   │   ├── llm_client.py          LLM abstraction — Ollama + Groq with fallback
 │   │   └── pipeline.py            Two-stage pipeline: generate SQL → execute →
@@ -432,10 +447,12 @@ curl -s http://localhost:8000/search \
 │       └── detector.py            Query intent classification — regex rules
 │                                  (COUNT/SUM/AVG/LIST/FILTER) with LLM fallback
 │
-│   ├── scripts/
-│   │   ├── generate.py            Schema extraction + business metadata merge
-│   │   └── metadata_data.py       Hand-curated TABLE_META & COLUMN_META
+├── scripts/
+│   ├── generate.py                Schema extraction + business metadata merge
+│   ├── metadata_data.py           Hand-curated TABLE_META & COLUMN_META
 │   │                              (descriptions, keywords, aliases, domains)
+│   ├── kb_bootstrap_data.py       Bootstrap files (domains, glossary, rules, patterns, examples)
+│   └── terms_data.py              Value corrections and enum value definitions
 │
 ├── knowledge_base/
 │   ├── tables/                    68 YAML files — table-level metadata
@@ -454,6 +471,40 @@ curl -s http://localhost:8000/search \
 
 ---
 
+### Filter Paths & Bridge Table Handling
+
+When a user query includes a filter value from a **lookup/dimension table** (e.g., "mumbai" on `dmn_City.cityName`), the retrieval engine:
+
+1. **Detects the entity** — `"mumbai" → dmn_City.cityName` via sample value matching
+2. **Expands bridge tables** — BFS from result tables through the FK graph to reach the filter table
+3. **Shows the join path** — The context displays the complete chain (e.g., `tbl_SaleOrder → tbl_Organization → dmn_City`) with each ON clause
+4. **Hides bridge tables from main listing** — Bridge tables appear in a `FILTER PATHS` section instead of as regular tables, preventing the LLM from joining them directly
+5. **Forces multi-hop compliance** — Rule 25 requires ALL intermediate tables in the join chain, with an explicit correct SQL example
+
+This ensures any LLM (Groq, Ollama, GPT, etc.) produces the same correct multi-hop join SQL:
+```sql
+-- Correct (Rule 25 enforced)
+FROM tbl_SaleOrder s
+JOIN tbl_Organization o ON s.organizationId = o.idOrganization
+JOIN dmn_City c ON o.cityId = c.idCity
+WHERE c.cityName = 'Mumbai'
+
+-- NOT: direct join skipping tbl_Organization
+-- FROM tbl_SaleOrder s JOIN dmn_City c ON s.organizationId = c.cityId
+```
+
+### Column Visibility Guarantee
+
+Columns referenced by detected entities or matching user query terms are guaranteed to appear in the visible column list via a 3-layer safety net:
+
+| Layer | Mechanism | Where |
+|-------|-----------|-------|
+| **Priority boost** | `important_columns` always move to front | `engine.py:418-421` |
+| **Query boost** | Columns whose name/aliases/search_keywords/sample_values match query words promoted to just after priority columns | `engine.py:423-436` |
+| **Entity override** | Detected-entity columns missing from `cols[:10]` are force-inserted at position 0 | `engine.py:449-453` |
+
+---
+
 ## Knowledge Base
 
 The knowledge base is the system's brain — a structured representation of your database schema enriched with business context. Each YAML file is curated to bridge the gap between technical column names and business user language.
@@ -466,7 +517,7 @@ The hand-curated business metadata lives in **`src/sql_chatbot/scripts/metadata_
 - **`COLUMN_META`** — dict keyed by `(table, column)` with: description, role (`identifier`, `foreign_key`, `dimension`, `metric`, `status`, `attribute`), importance, aliases, and sample values.
 - **`ACTIVE_ALIASES`** — shared alias map for all `isActive` columns.
 
-**Workflow:** Edit `metadata_data.py` → run `python -m sql_chatbot.scripts.generate merge` → restart the server. Never edit YAML files directly — they are overwritten by the merge command.
+**Workflow:** Edit `scripts/metadata_data.py` → run `python scripts/generate.py merge` → restart the server. Never edit YAML files directly — they are overwritten by the merge command.
 
 ### Table Metadata (`knowledge_base/tables/`)
 
@@ -530,12 +581,8 @@ All retrieval parameters are configurable in `src/sql_chatbot/config.py`:
 | `DOMAIN_FILE_FALLBACK_FLOOR` | 0.15 | Minimum score when no domain file match |
 | `CE_WEIGHT` | 0.40 | Cross-encoder (reranker) contribution weight |
 | `RRF_WEIGHT` | 0.60 | RRF (dense + sparse) contribution weight |
-| `DOMAIN_BOOST_TOP_PRIMARY` | 0.75 | Score floor for top-domain primary tables |
-| `DOMAIN_BOOST_TOP_NON_PRIMARY` | 0.55 | Score floor for top-domain non-primary tables |
-| `DOMAIN_BOOST_OTHER_PRIMARY` | 0.50 | Score floor for other-domain primary tables |
-| `DOMAIN_BOOST_OTHER_NON_PRIMARY` | 0.40 | Score floor for other-domain non-primary tables |
-| `DOMAIN_BOOST_EXISTING_FLOOR` | 0.85 | Min score boost if domain already in results |
-| `DOMAIN_BOOST_NEW_FLOOR` | 0.65 | Min score boost for newly added domain tables |
+| `DOMAIN_BOOST_FACTOR` | 0.60 | Score boost factor for domain-matched tables |
+| `DOMAIN_BOOST_FLOOR` | 0.40 | Minimum score floor for domain-boosted tables |
 | `KEYWORD_SCORE_PER_MATCH` | 1.00 | Score added per keyword/value match |
 | `KEYWORD_NULL_TABLE_BASE` | 0.01 | Base score when a keyword match has no table context |
 
@@ -547,7 +594,7 @@ Changes take effect on the next server restart.
 
 The system incorporates multiple layers of protection:
 
-1. **Prompt-Level Guardrails** — 20 strict rules in the generation prompt (`generation/prompt.py`) enforce: SELECT-only, no hallucinated tables/columns, no sensitive data exposure, only use join relationships defined in the context, only filter on `filterable` columns, only aggregate on `aggregatable` columns, and anti-prompt-injection. If any rule cannot be satisfied, the LLM returns `NOT_SUPPORTED`.
+1. **Prompt-Level Guardrails** — 25 strict rules in the generation prompt (`generation/prompt.py`) enforce: SELECT-only, no hallucinated tables/columns, no sensitive data exposure, only use join relationships defined in the context, only filter on `filterable` columns, only aggregate on `aggregatable` columns, anti-prompt-injection, multi-hop join paths must include all intermediate tables, and detected value columns must be joined through foreign keys. If any rule cannot be satisfied, the LLM returns `NOT_SUPPORTED`.
 
 2. **SQL Execution Validation** — Server-side regex in `db/executor.py` blocks `INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`, `EXEC`, `GRANT`, and 15+ other harmful patterns. Transaction and batch separators are prohibited.
 
@@ -563,15 +610,15 @@ When either the database schema or business metadata changes:
 
 ```bash
 # Full rebuild (schema + metadata + bootstrap files):
-python -m sql_chatbot.scripts.generate full-rebuild
+python scripts/generate.py full-rebuild
 
 # Or individual steps:
-python -m sql_chatbot.scripts.generate              # Step 1: Extract from DB
-python -m sql_chatbot.scripts.generate merge          # Step 2: Merge business metadata
-python -m sql_chatbot.scripts.generate bootstrap      # Step 3: Write bootstrap files
+python scripts/generate.py              # Step 1: Extract from DB
+python scripts/generate.py merge        # Step 2: Merge business metadata
+python scripts/generate.py bootstrap    # Step 3: Write bootstrap files
 ```
 
-> **Note:** If the database is unavailable, run `merge` and `bootstrap` separately — they only depend on existing YAML files and the Python metadata sources.
+> **Note:** If the database is unavailable, run `merge` and `bootstrap` separately — they only depend on existing YAML files in `knowledge_base/` and the Python metadata sources in `scripts/`.
 
 > **Important:** After regenerating the knowledge base, **restart the server** for the changes to take effect:
 > ```bash
@@ -590,13 +637,13 @@ The project includes a golden-set benchmark that evaluates retrieval accuracy ac
 
 ```bash
 # Full benchmark (all 40 queries) — takes ~3-5 minutes
-python tests/run_golden_set.py
+python -m sql_chatbot.tests.run_golden_set
 
 # Quick smoke test (1 query per type) — takes ~1 minute
-python tests/run_golden_set.py --quick
+python -m sql_chatbot.tests.run_golden_set --quick
 
 # Verbose mode (show per-query details)
-python tests/run_golden_set.py --verbose
+python -m sql_chatbot.tests.run_golden_set --verbose
 ```
 
 ### Test Categories
@@ -641,7 +688,7 @@ python tests/run_golden_set.py --verbose
 
 ### Adding Test Cases
 
-Edit `tests/golden_set.yaml` and add a new entry:
+Edit `src/sql_chatbot/tests/golden_set.yaml` and add a new entry:
 
 ```yaml
 - query: "your natural language query here"
@@ -672,7 +719,7 @@ Exit code is non-zero if any test fails, making it suitable for CI pipelines.
 | Category | Packages |
 |----------|----------|
 | Core | `pyyaml`, `numpy`, `python-dotenv` |
-| Embeddings & Search | `FlagEmbedding` (BGE-M3), `chromadb`, `sentence-transformers` (BGE Reranker), `rank_bm25` |
+| Embeddings & Search | `FlagEmbedding` (BGE-M3), `chromadb`, `sentence-transformers` (BGE Reranker), `bm25s` |
 | Fuzzy Matching | `rapidfuzz` |
 | Database | `pyodbc` (ODBC Driver 17 for SQL Server) |
 | API Server | `fastapi`, `uvicorn`, `pydantic` |
