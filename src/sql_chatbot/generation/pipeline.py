@@ -86,10 +86,15 @@ def run_sql_with_retry(user_query: str, retrieval_result: dict) -> dict:
 
     valid_columns = _build_valid_columns(retrieval_result)
     context_str = build_context_str(retrieval_result)
+    result_table_names = [r["table"] for r in retrieval_result.get("results", [])]
     prompt = build_prompt(
         user_query,
         context_str,
         intent=retrieval_result.get("intent"),
+        detected_entities=retrieval_result.get("detected_entities"),
+        detected_filters=retrieval_result.get("detected_filters"),
+        context_joins=retrieval_result.get("joins", []),
+        main_tables=result_table_names,
     )
     # logger.info(context_str)
     # logger.info(user_query)

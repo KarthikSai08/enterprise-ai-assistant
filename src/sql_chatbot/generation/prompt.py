@@ -7,8 +7,28 @@ def build_context_str(result: dict) -> str:
         for fk in r.get("foreign_keys", []):
             fk_map.setdefault(tbl, {})[fk["name"]] = fk["references"]
 
+    bridge_notes = []
     lines = []
     for r in result.get("results", []):
+        if r.get("bridge"):
+            tbl = r.get("table", "")
+            srcs = []
+            for j in result.get("joins", []):
+                on = j.get("on", "")
+                if tbl in on.replace("=", " ").split(".")[0::2]:
+                    srcs.append(on)
+            note = f"  {tbl}"
+            if srcs:
+                note += f" reachable via: {'; '.join(srcs[:2])}"
+            col_vals = []
+            for col_name, vals in r.get("column_samples", {}).items():
+                if not is_sensitive_column(col_name):
+                    col_vals.append(f"{col_name}={vals}")
+            if col_vals:
+                note += f" | Filter columns: {'; '.join(col_vals[:3])}"
+            bridge_notes.append(note)
+            continue
+
         table = r.get("table", "")
         desc = r.get("description", "")[:120]
         domain = r.get("domain", "")
@@ -45,6 +65,10 @@ def build_context_str(result: dict) -> str:
             if not any(is_sensitive_column(part) for part in on.replace("=", " ").split()):
                 lines.append(f"  Join: {on}")
 
+    if bridge_notes:
+        lines.append("FILTER PATHS (reachable via joins above — must go through ALL intermediate tables):")
+        lines.extend(bridge_notes)
+
     rules = []
     for r in result.get("results", []):
         for rule in r.get("matching_rules", []):
@@ -56,12 +80,52 @@ def build_context_str(result: dict) -> str:
     return "\n".join(lines)
 
 
-def build_prompt(query: str, context: str, intent: dict | None = None, dialect: str = "SQL Server") -> str:
+def build_prompt(query: str, context: str, intent: dict | None = None, dialect: str = "SQL Server",
+                  detected_entities: list[dict] | None = None, detected_filters: list[dict] | None = None,
+                  context_joins: list[dict] | None = None, main_tables: list[str] | None = None) -> str:
+    main_tables = main_tables or []
     intent_hint = ""
     if intent and intent.get("intents"):
         intent_hint = f"\nDETECTED INTENT: {', '.join(intent['intents'])} (use for COUNT/SUM/AVG decisions).\n"
+
+    entities_block = ""
+    if detected_entities:
+        entities_block = "\nDETECTED VALUES (from your question):\n"
+        seen_pairs: set[str] = set()
+        needs_join_entities = []
+        for e in detected_entities:
+            pair_key = f'{e["table"]}.{e["column"]}'
+            if pair_key in seen_pairs:
+                continue
+            seen_pairs.add(pair_key)
+            entities_block += f'  "{e["value"]}" → {e["table"]}.{e["column"]}\n'
+            if context_joins:
+                for j in context_joins:
+                    on = j.get("on", "")
+                    if e["table"] in on.replace("=", " ").split(".")[0::2]:
+                        entities_block += f'    Join: {on}\n'
+            if e["table"] not in main_tables:
+                needs_join_entities.append(e)
+        if needs_join_entities:
+            entities_block += (
+                "\nIMPORTANT: The values above are from lookup/dimension tables. To filter by them,\n"
+                "you MUST JOIN through the foreign keys shown in DATABASE CONTEXT above.\n"
+                "Never query these tables directly as FROM — always JOIN them to your main query table.\n"
+            )
+
+    filters_block = ""
+    if detected_filters:
+        filters_block = "\nDETECTED FILTER VALUES (use these exact operators/values verbatim, never invent different ones):\n"
+        for f in detected_filters:
+            if f["type"] == "numeric":
+                filters_block += f'  {f["operator"]} {f["value"]}  (from: "{f["raw"]}")\n'
+            elif f["type"] == "numeric_range":
+                filters_block += f'  BETWEEN {f["low"]} AND {f["high"]}  (from: "{f["raw"]}")\n'
+            elif f["type"] == "date":
+                filters_block += f'  relative date: {f["label"]}  (from: "{f["raw"]}")\n'
+
     return f"""You are a read-only T-SQL (SQL Server) generator. Convert the question into a single SELECT query using ONLY the schema below.
-{intent_hint}
+{intent_hint}{entities_block}{filters_block}
 DATABASE CONTEXT (only tables/columns allowed):
 {context}
 
@@ -198,6 +262,28 @@ NOT_SUPPORTED
     ✓ No WHERE conditions beyond what the user asked for
     If ANY validation fails or any rule is violated, return EXACTLY:
     NOT_SUPPORTED
+ 24. SPECIAL RULE FOR DETECTED VALUES (the "DETECTED VALUES" section above):
+    If a value from DETECTED VALUES is in a different table than your main
+    query table, you MUST use a JOIN to reach it — never query that table
+    directly as FROM, and never use its column unqualified in WHERE on a
+    different table. The correct pattern is:
+      SELECT main.col FROM main_table main
+      JOIN lookup_table lt ON main.fk_col = lt.pk_col
+      WHERE lt.value_column = 'detected_value'
+    The specific JOIN syntax and FK column are shown in DATABASE CONTEXT.
+ 25. MULTI-HOP JOIN PATHS: When you need to connect three or more tables
+    (e.g., tbl_SaleOrder → tbl_Organization → dmn_City), you MUST include
+    EVERY intermediate table in the JOIN chain. NEVER skip an intermediate
+    table and attempt a direct JOIN between two tables that have no explicit
+    relationship defined in the "Join:" lines. For the example path above,
+    the correct SQL is:
+      FROM tbl_SaleOrder s
+      JOIN tbl_Organization o ON s.organizationId = o.idOrganization
+      JOIN dmn_City c ON o.cityId = c.idCity
+    NOT:
+      FROM tbl_SaleOrder s JOIN dmn_City c ON s.organizationId = c.cityId
+    Only use "Join:" relationships shown in DATABASE CONTEXT — never invent
+    new ON conditions between unrelated tables.
 
 USER QUESTION:
 \"\"\"{query}\"\"\"
