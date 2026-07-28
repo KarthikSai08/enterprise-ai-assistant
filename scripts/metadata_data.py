@@ -336,10 +336,10 @@ TABLE_META = {
             "Total bookings this month",
             "Bookings by date range"
         ],
-        "important_columns": ["bookingNo", "bookingDate", "totalAmount", "statusId"],
-        "business_metrics": ["totalAmount"],
-        "common_filters": ["statusId", "bookingDate"],
-        "common_groupby": ["bookingDate", "statusId"],
+        "important_columns": ["bookingNo", "bookingDate", "dealerOrgId", "totalAmount", "statusId"],
+        "business_metrics": ["bookingQty", "pendingQty", "rate", "totalAmount"],
+        "common_filters": ["dealerOrgId", "statusId", "bookingDate"],
+        "common_groupby": ["bookingDate", "dealerOrgId", "statusId"],
     },
     "tbl_BookingDelivery": {
         "display_name": "Booking Deliveries",
@@ -478,9 +478,7 @@ TABLE_META = {
             "worker details", "employee details", "staff details",
             "headcount", "head count", "man count",
             "new joiners", "joining", "new employee", "recent joiners",
-            "who joined", "recently joined","city", "location", "work location", "city wise", "location wise",
-            "employee city", "employees from", "employees in city",
-            "employees from state", "state wise employees"
+            "who joined", "recently joined"
         ],
         "common_user_intents": [
             "List all employees",
@@ -513,19 +511,25 @@ TABLE_META = {
         "search_keywords": [
             "error log", "error logs", "exception", "exceptions",
             "error", "errors", "bug", "system error",
-            "application error", "crash log", "error report"
+            "application error", "crash log", "error report",
+            "stack trace", "severity", "debug", "timestamp",
+            "error details", "error source"
         ],
         "common_user_intents": [
             "Show recent errors",
             "Error log today",
             "What errors occurred",
             "Application exceptions",
-            "Error details"
+            "Error details",
+            "Errors by severity",
+            "Most common errors",
+            "Errors in last 7 days",
+            "Errors by source"
         ],
-        "important_columns": ["errorMessage", "userId"],
+        "important_columns": ["severity", "errorSource", "errorMessage", "stackTrace", "userId", "occurredOn"],
         "business_metrics": [],
-        "common_filters": [],
-        "common_groupby": [],
+        "common_filters": ["severity", "occurredOn", "userId"],
+        "common_groupby": ["severity", "errorSource", "occurredOn"],
     },
     "tbl_EwayBill": {
         "display_name": "E-Way Bills",
@@ -738,10 +742,10 @@ TABLE_META = {
             "Leave types with quota",
             "Leave type master data"
         ],
-        "important_columns": ["leaveCode"],
-        "business_metrics": [],
+        "important_columns": ["leaveCode", "leaveName", "maxDays"],
+        "business_metrics": ["maxDays"],
         "common_filters": ["isActive"],
-        "common_groupby": [],
+        "common_groupby": ["leaveCode"],
     },
     "tbl_LoadingDetail": {
         "display_name": "Loading Details",
@@ -762,10 +766,10 @@ TABLE_META = {
             "Loading sheet for dispatch",
             "Products loaded today"
         ],
-        "important_columns": ["productId"],
-        "business_metrics": [],
-        "common_filters": [],
-        "common_groupby": [],
+        "important_columns": ["loadingDate", "productId", "quantity", "packageCount", "packageType"],
+        "business_metrics": ["quantity", "packageCount"],
+        "common_filters": ["tripId", "loadingDate"],
+        "common_groupby": ["tripId", "productId"],
     },
     "tbl_OrgAddress": {
         "display_name": "Organization Addresses",
@@ -903,10 +907,10 @@ TABLE_META = {
             "PAN details for company Z",
             "Registration by state"
         ],
-        "important_columns": ["organizationId"],
+        "important_columns": ["organizationId", "gstin", "pan", "registrationType"],
         "business_metrics": [],
-        "common_filters": ["organizationId"],
-        "common_groupby": [],
+        "common_filters": ["organizationId", "registrationType"],
+        "common_groupby": ["registrationType", "stateCode"],
     },
     "tbl_PaymentMade": {
         "display_name": "Payments Made",
@@ -936,8 +940,8 @@ TABLE_META = {
         ],
         "important_columns": ["paymentNo", "paymentDate", "amount", "paymentMode", "referenceNo"],
         "business_metrics": ["amount"],
-        "common_filters": ["paymentDate", "paymentMode"],
-        "common_groupby": ["paymentMode", "paymentDate"],
+        "common_filters": ["vendorId", "paymentDate", "paymentMode"],
+        "common_groupby": ["vendorId", "paymentMode", "paymentDate"],
     },
     "tbl_PaymentReceived": {
         "display_name": "Payments Received",
@@ -988,10 +992,10 @@ TABLE_META = {
             "Salary slip for employee Z",
             "PF deduction details"
         ],
-        "important_columns": [],
-        "business_metrics": [],
-        "common_filters": [],
-        "common_groupby": [],
+        "important_columns": ["employeeId", "basic", "grossPay", "netPay", "pf"],
+        "business_metrics": ["basic", "hra", "da", "ta", "pf", "esi", "tds", "grossPay", "totalDeductions", "netPay"],
+        "common_filters": ["payrollHeaderId", "employeeId"],
+        "common_groupby": ["employeeId"],
     },
     "tbl_PayrollHeader": {
         "display_name": "Payroll Headers",
@@ -1295,10 +1299,10 @@ TABLE_META = {
             "Quality parameters for product Y",
             "All checklists"
         ],
-        "important_columns": ["productId"],
+        "important_columns": ["checklistName", "productId"],
         "business_metrics": [],
-        "common_filters": ["productId"],
-        "common_groupby": [],
+        "common_filters": ["productId", "isActive"],
+        "common_groupby": ["productId"],
     },
     "tbl_QualityParameter": {
         "display_name": "Quality Parameters",
@@ -1414,8 +1418,8 @@ TABLE_META = {
             "Available transport routes",
             "Route details"
         ],
-        "important_columns": ["routeName", "sourceCityId", "destCityId"],
-        "business_metrics": [],
+        "important_columns": ["routeCode", "routeName", "sourceCityId", "destCityId", "distanceKm"],
+        "business_metrics": ["distanceKm"],
         "common_filters": ["sourceCityId", "destCityId"],
         "common_groupby": ["sourceCityId", "destCityId"],
     },
@@ -1664,7 +1668,7 @@ TABLE_META = {
             "Completed trips today"
         ],
         "important_columns": ["tripNo", "tripDate", "vehicleId", "driverId", "routeId", "tripStatusId"],
-        "business_metrics": [],
+        "business_metrics": ["loadingAmount", "unloadingAmount", "expenseAmount", "totalAmount"],
         "common_filters": ["tripDate", "vehicleId", "driverId", "tripStatusId"],
         "common_groupby": ["vehicleId", "driverId", "tripDate", "tripStatusId"],
     },

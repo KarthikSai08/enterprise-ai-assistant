@@ -547,6 +547,286 @@ GLOSSARY_DATA = {
         ],
         'description': 'The amount that is yet to be paid by a customer or to a vendor, representing pending receivables or payables.',
         'domain': 'Finance'
+    },
+    'PF': {
+        'full_form': 'Provident Fund',
+        'synonyms': [
+            'pf',
+            'provident fund',
+            'epf',
+            'employees provident fund'
+        ],
+        'description': 'A mandatory retirement benefit scheme where both employer and employee contribute a percentage of the employee\'s basic salary.',
+        'domain': 'HR'
+    },
+    'ESI': {
+        'full_form': 'Employee State Insurance',
+        'synonyms': [
+            'esi',
+            'employee state insurance',
+            'medical insurance'
+        ],
+        'description': 'A self-financing health insurance scheme for employees earning below a threshold, providing medical and cash benefits.',
+        'domain': 'HR'
+    },
+    'CTC': {
+        'full_form': 'Cost to Company',
+        'synonyms': [
+            'ctc',
+            'cost to company',
+            'total compensation',
+            'salary package'
+        ],
+        'description': 'The total cost an employer incurs for an employee including salary, benefits, bonuses, PF, and insurance.',
+        'domain': 'HR'
+    },
+    'LOP': {
+        'full_form': 'Loss of Pay',
+        'synonyms': [
+            'lop',
+            'loss of pay',
+            'unpaid leave',
+            'leave without pay'
+        ],
+        'description': 'Leave taken by an employee without pay when leave balance is exhausted or leave type is unpaid.',
+        'domain': 'HR'
+    },
+    'HRA': {
+        'full_form': 'House Rent Allowance',
+        'synonyms': [
+            'hra',
+            'house rent allowance',
+            'rent allowance'
+        ],
+        'description': 'A component of salary provided to employees to cover rental housing expenses, partially tax-exempt under income tax rules.',
+        'domain': 'HR'
+    },
+    'TA': {
+        'full_form': 'Travel Allowance',
+        'synonyms': [
+            'ta',
+            'travel allowance',
+            'conveyance allowance',
+            'transport allowance'
+        ],
+        'description': 'An allowance paid to employees to cover travel expenses incurred for official purposes or commuting.',
+        'domain': 'HR'
+    },
+    'DA': {
+        'full_form': 'Dearness Allowance',
+        'synonyms': [
+            'da',
+            'dearness allowance',
+            'cost of living allowance'
+        ],
+        'description': 'An allowance paid to employees to offset the impact of inflation on their cost of living, calculated as a percentage of basic salary.',
+        'domain': 'HR'
+    },
+    'SKU': {
+        'full_form': 'Stock Keeping Unit',
+        'synonyms': [
+            'sku',
+            'stock keeping unit',
+            'product code',
+            'item code',
+            'part number'
+        ],
+        'description': 'A unique identifier for each distinct product or item that can be purchased, stored, and sold in inventory management.',
+        'domain': 'Product'
+    },
+    'BOM': {
+        'full_form': 'Bill of Materials',
+        'synonyms': [
+            'bom',
+            'bill of materials',
+            'product structure',
+            'component list',
+            'parts list'
+        ],
+        'description': 'A comprehensive list of raw materials, components, and sub-assemblies required to manufacture a finished product.',
+        'domain': 'Product'
+    },
+    'MRP': {
+        'full_form': 'Maximum Retail Price',
+        'synonyms': [
+            'mrp',
+            'maximum retail price',
+            'max price',
+            'retail price'
+        ],
+        'description': 'The highest price at which a product can be sold to the end consumer as printed on the packaging, inclusive of all taxes.',
+        'domain': 'Product'
+    },
+    'COGS': {
+        'full_form': 'Cost of Goods Sold',
+        'synonyms': [
+            'cogs',
+            'cost of goods sold',
+            'cost of sales',
+            'cost of revenue'
+        ],
+        'description': 'The direct cost attributable to the production of goods sold, including raw material and labor costs.',
+        'domain': 'Finance'
+    },
+    'P&L': {
+        'full_form': 'Profit and Loss Statement',
+        'synonyms': [
+            'pnl',
+            'p&l',
+            'profit and loss',
+            'income statement',
+            'statement of operations'
+        ],
+        'description': 'A financial statement summarizing revenues, costs, and expenses over a period to show net profit or loss.',
+        'domain': 'Finance'
+    },
+    'AP': {
+        'full_form': 'Accounts Payable',
+        'synonyms': [
+            'ap',
+            'accounts payable',
+            'payables',
+            'creditors',
+            'vendor payables'
+        ],
+        'description': 'Money owed by a business to its suppliers or vendors for goods and services purchased on credit.',
+        'domain': 'Finance'
+    },
+    'AR': {
+        'full_form': 'Accounts Receivable',
+        'synonyms': [
+            'ar',
+            'accounts receivable',
+            'receivables',
+            'debtors',
+            'customer receivables'
+        ],
+        'description': 'Money owed to a business by its customers for goods or services delivered but not yet paid for.',
+        'domain': 'Finance'
+    },
+    'LRR': {
+        'full_form': 'Lorry Receipt Number',
+        'synonyms': [
+            'lrr',
+            'lr number',
+            'lorry receipt no',
+            'transport receipt number'
+        ],
+        'description': 'The unique reference number on a lorry receipt used to track consignments during transportation.',
+        'domain': 'Logistics'
+    },
+    'FTL': {
+        'full_form': 'Full Truck Load',
+        'synonyms': [
+            'ftl',
+            'full truck load',
+            'full load',
+            'full vehicle load'
+        ],
+        'description': 'A shipping mode where an entire truck is dedicated to a single consignment, typically for large volume shipments.',
+        'domain': 'Logistics'
+    },
+    'LTL': {
+        'full_form': 'Less Than Truck Load',
+        'synonyms': [
+            'ltl',
+            'less than truck load',
+            'part load',
+            'consolidated shipment'
+        ],
+        'description': 'A shipping mode where multiple consignments share truck space, each paying for the portion of space used.',
+        'domain': 'Logistics'
+    },
+    'QC': {
+        'full_form': 'Quality Control',
+        'synonyms': [
+            'qc',
+            'quality control',
+            'quality inspection',
+            'quality check'
+        ],
+        'description': 'The process of inspecting products to ensure they meet specified quality standards and requirements.',
+        'domain': 'Quality'
+    },
+    'RFQ': {
+        'full_form': 'Request for Quotation',
+        'synonyms': [
+            'rfq',
+            'request for quotation',
+            'request for quote',
+            'quotation request',
+            'price enquiry'
+        ],
+        'description': 'A document sent to suppliers requesting pricing and terms for specified products or services.',
+        'domain': 'Purchase'
+    },
+    'SOH': {
+        'full_form': 'Stock on Hand',
+        'synonyms': [
+            'soh',
+            'stock on hand',
+            'available stock',
+            'current stock',
+            'inventory level'
+        ],
+        'description': 'The quantity of a product currently available in inventory at a given location or across all warehouses.',
+        'domain': 'Inventory'
+    },
+    'GSTR': {
+        'full_form': 'GST Return',
+        'synonyms': [
+            'gstr',
+            'gst return',
+            'gst filing',
+            'tax return'
+        ],
+        'description': 'Periodic returns filed by registered taxpayers to report sales, purchases, and tax paid/collected under GST.',
+        'domain': 'Compliance'
+    },
+    'TAN': {
+        'full_form': 'Tax Deduction and Collection Account Number',
+        'synonyms': [
+            'tan',
+            'tax deduction account number',
+            'tds account number',
+            'tan number'
+        ],
+        'description': 'A 10-character alphanumeric number required for persons who are responsible for deducting or collecting tax at source.',
+        'domain': 'Compliance'
+    },
+    'FIFO': {
+        'full_form': 'First In, First Out',
+        'synonyms': [
+            'fifo',
+            'first in first out',
+            'inventory valuation method'
+        ],
+        'description': 'An inventory valuation method assuming the oldest stock items are sold or used first, affecting cost of goods sold.',
+        'domain': 'Inventory'
+    },
+    'Indent': {
+        'full_form': 'Purchase Indent',
+        'synonyms': [
+            'indent',
+            'purchase indent',
+            'material requisition',
+            'store requisition',
+            'demand note'
+        ],
+        'description': 'An internal document raised by a department requesting the purchase department to procure specified materials.',
+        'domain': 'Purchase'
+    },
+    'Consignment': {
+        'full_form': 'Consignment Shipment',
+        'synonyms': [
+            'consignment',
+            'shipment',
+            'dispatch',
+            'cargo',
+            'goods shipment'
+        ],
+        'description': 'A batch of goods sent from one party to another for delivery or sale, tracked via a consignment note.',
+        'domain': 'Logistics'
     }
 }
 
@@ -655,6 +935,111 @@ EXAMPLES_DATA = [
         ],
         'domain': 'HR',
         'explanation': 'Filters attendance by employee code and current month with employee name join.'
+    },
+    {
+        'nl': 'Show the total payroll summary for this month',
+        'sql': "SELECT ph.payMonth, COUNT(DISTINCT pd.employeeId) AS totalEmployees,\n       SUM(pd.grossPay) AS totalGross, SUM(pd.totalDeductions) AS totalDeductions,\n       SUM(pd.netPay) AS totalNetPay\nFROM tbl_PayrollHeader ph JOIN tbl_PayrollDetail pd ON ph.idPayrollHeader = pd.payrollHeaderId\nWHERE MONTH(ph.payPeriodStart) = MONTH(GETDATE()) AND YEAR(ph.payPeriodStart) = YEAR(GETDATE())\nGROUP BY ph.payMonth\n",
+        'tables': ['tbl_PayrollHeader', 'tbl_PayrollDetail'],
+        'domain': 'HR',
+        'explanation': 'Aggregates payroll details by month to show total employees, gross, deductions, and net pay.'
+    },
+    {
+        'nl': 'What is the current stock balance of product X?',
+        'sql': 'SELECT w.warehouseName, sl.closingQty\nFROM tbl_StockLedger sl JOIN tbl_Warehouse w ON sl.warehouseId = w.idWarehouse\nWHERE sl.productId = @product_id ORDER BY w.warehouseName\n',
+        'tables': ['tbl_StockLedger', 'tbl_Warehouse'],
+        'domain': 'Inventory',
+        'explanation': 'Shows closing stock quantity for a product across all warehouses.'
+    },
+    {
+        'nl': 'Show pending purchase orders with vendor name',
+        'sql': "SELECT po.poNumber, po.poDate, po.totalAmount, o.firmName AS vendor\nFROM tbl_PurchaseOrder po JOIN tbl_Organization o ON po.vendorId = o.idOrganization\nJOIN dim_Status s ON po.statusId = s.idStatus\nWHERE s.statusName = 'Pending' ORDER BY po.poDate DESC\n",
+        'tables': ['tbl_PurchaseOrder', 'tbl_Organization', 'dim_Status'],
+        'domain': 'Purchase',
+        'explanation': 'Filters purchase orders by pending status with vendor name join.'
+    },
+    {
+        'nl': 'List all E-Way Bills expiring this week',
+        'sql': "SELECT eb.ewayBillNo, eb.validFrom, eb.validTo,\n       sih.invoiceNo, o.firmName AS consignor\nFROM tbl_EwayBill eb JOIN tbl_SaleInvoiceHeader sih ON eb.invoiceId = sih.idInvoice\nJOIN tbl_Organization o ON sih.dealerOrgId = o.idOrganization\nWHERE eb.validTo BETWEEN GETDATE() AND DATEADD(DAY, 7, GETDATE())\nORDER BY eb.validTo\n",
+        'tables': ['tbl_EwayBill', 'tbl_SaleInvoiceHeader', 'tbl_Organization'],
+        'domain': 'Compliance',
+        'explanation': 'Shows e-way bills expiring within 7 days with invoice and consignor details.'
+    },
+    {
+        'nl': 'Show the leave balance for each employee',
+        'sql': "SELECT e.firstName + ' ' + e.lastName AS employeeName,\n       lt.leaveCode, lt.maxDays,\n       (lt.maxDays - COALESCE(SUM(la.totalDays), 0)) AS balanceDays\nFROM tbl_Employee e CROSS JOIN tbl_LeaveType lt\nLEFT JOIN tbl_LeaveApplication la ON e.idEmployee = la.employeeId\n    AND la.leaveTypeId = lt.idLeaveType\n    AND YEAR(la.fromDate) = YEAR(GETDATE())\nGROUP BY e.firstName, e.lastName, lt.leaveCode, lt.maxDays\nORDER BY employeeName, lt.leaveCode\n",
+        'tables': ['tbl_Employee', 'tbl_LeaveType', 'tbl_LeaveApplication'],
+        'domain': 'HR',
+        'explanation': 'Calculates remaining leave balance by subtracting used days from max allowed per leave type.'
+    },
+    {
+        'nl': 'What is the total TDS deducted this financial year?',
+        'sql': 'SELECT tdsSection, SUM(tdsAmount) AS totalTds\nFROM tbl_TDSDeduction\nWHERE YEAR(tdsDate) = YEAR(GETDATE())\nGROUP BY tdsSection ORDER BY tdsSection\n',
+        'tables': ['tbl_TDSDeduction'],
+        'domain': 'Finance',
+        'explanation': 'Aggregates TDS deductions by section for the current financial year.'
+    },
+    {
+        'nl': 'Show the account ledger balance for a specific account',
+        'sql': 'SELECT al.transactionDate, al.particulars, al.debit, al.credit,\n       SUM(al.debit - al.credit) OVER (ORDER BY al.transactionDate, al.idLedger) AS runningBalance\nFROM tbl_AccountLedger al\nWHERE al.accountGroupId = @account_group_id\nORDER BY al.transactionDate\n',
+        'tables': ['tbl_AccountLedger', 'tbl_AccountGroup'],
+        'domain': 'Finance',
+        'explanation': 'Displays ledger entries with a running balance calculation for a specific account.'
+    },
+    {
+        'nl': 'List quality checklists for a product category',
+        'sql': 'SELECT qc.checklistName, qp.parameterName, qp.standardValue, qp.uomId\nFROM tbl_QualityChecklist qc\nJOIN tbl_QualityParameter qp ON qc.idChecklist = qp.checklistId\nJOIN tbl_ProductMaster pm ON qc.productId = pm.idProduct\nWHERE pm.categoryId = @category_id\nORDER BY qc.checklistName, qp.parameterName\n',
+        'tables': ['tbl_QualityChecklist', 'tbl_QualityParameter', 'tbl_ProductMaster'],
+        'domain': 'Quality',
+        'explanation': 'Shows quality checklists and their parameters filtered by product category.'
+    },
+    {
+        'nl': 'Show all trips with total expenses',
+        'sql': 'SELECT ts.tripNo, ts.tripDate, vm.vehicleNo, dm.driverName,\n       ts.loadingAmount, ts.unloadingAmount, ts.expenseAmount,\n       (ts.loadingAmount + ts.unloadingAmount + ts.expenseAmount) AS totalExpenses\nFROM tbl_TripSheet ts\nJOIN tbl_VehicleMaster vm ON ts.vehicleId = vm.idVehicle\nJOIN tbl_DriverMaster dm ON ts.driverId = dm.idDriver\nORDER BY ts.tripDate DESC\n',
+        'tables': ['tbl_TripSheet', 'tbl_VehicleMaster', 'tbl_DriverMaster'],
+        'domain': 'Logistics',
+        'explanation': 'Displays trip details with vehicle, driver, and calculated total expenses.'
+    },
+    {
+        'nl': 'Show product-wise pricing with current rates',
+        'sql': 'SELECT pm.productName, pg.gradeName, pp.unitPrice, gsr.saleRate, gpr.purchaseRate\nFROM tbl_ProductPricing pp\nJOIN tbl_ProductMaster pm ON pp.productId = pm.idProduct\nJOIN tbl_ProductGrade pg ON pp.gradeId = pg.idGrade\nLEFT JOIN tbl_GlobalSaleRate gsr ON pp.productId = gsr.productId AND pp.gradeId = gsr.gradeId\nLEFT JOIN tbl_GlobalPurchaseRate gpr ON pp.productId = gpr.productId AND pp.gradeId = gpr.gradeId\nWHERE pp.isActive = 1\nORDER BY pm.productName, pg.gradeName\n',
+        'tables': ['tbl_ProductPricing', 'tbl_ProductMaster', 'tbl_ProductGrade', 'tbl_GlobalSaleRate', 'tbl_GlobalPurchaseRate'],
+        'domain': 'Pricing',
+        'explanation': 'Shows product pricing with global sale and purchase rates for comparison.'
+    },
+    {
+        'nl': 'List recent audit log entries by user',
+        'sql': "SELECT al.activityDate, al.activity, al.tableName, al.recordId,\n       u.userName\nFROM tbl_AuditLog al JOIN tbl_UserMaster u ON al.userId = u.idUser\nWHERE al.userId = @user_id\nORDER BY al.activityDate DESC\n",
+        'tables': ['tbl_AuditLog', 'tbl_UserMaster'],
+        'domain': 'System',
+        'explanation': 'Shows audit trail filtered by user with activity details and user name.'
+    },
+    {
+        'nl': 'Show monthly sales trend for the current year',
+        'sql': "SELECT MONTH(invoiceDate) AS monthNum,\n       DATENAME(MONTH, invoiceDate) AS monthName,\n       COUNT(idInvoice) AS invoiceCount,\n       SUM(grandTotal) AS totalSales\nFROM tbl_SaleInvoiceHeader\nWHERE YEAR(invoiceDate) = YEAR(GETDATE())\nGROUP BY MONTH(invoiceDate), DATENAME(MONTH, invoiceDate)\nORDER BY MONTH(invoiceDate)\n",
+        'tables': ['tbl_SaleInvoiceHeader'],
+        'domain': 'Sales',
+        'explanation': 'Aggregates sales by month showing invoice count and total revenue trend.'
+    },
+    {
+        'nl': 'Show vendor evaluation scores with average rating',
+        'sql': 'SELECT o.firmName AS vendor,\n       COUNT(ve.idEvaluation) AS totalEvaluations,\n       AVG(ve.overallScore) AS averageScore,\n       MAX(ve.evaluationDate) AS lastEvaluated\nFROM tbl_VendorEvaluation ve\nJOIN tbl_Organization o ON ve.vendorId = o.idOrganization\nGROUP BY o.firmName\nORDER BY averageScore DESC\n',
+        'tables': ['tbl_VendorEvaluation', 'tbl_Organization'],
+        'domain': 'Purchase',
+        'explanation': 'Aggregates vendor evaluation scores to show average rating, count, and last evaluation date.'
+    },
+    {
+        'nl': 'Show stock transfer history between warehouses',
+        'sql': 'SELECT st.transferNo, st.transferDate,\n       fw.warehouseName AS fromWarehouse,\n       tw.warehouseName AS toWarehouse,\n       pm.productName, st.quantity, st.statusId\nFROM tbl_StockTransfer st\nJOIN tbl_Warehouse fw ON st.fromWarehouseId = fw.idWarehouse\nJOIN tbl_Warehouse tw ON st.toWarehouseId = tw.idWarehouse\nJOIN tbl_ProductMaster pm ON st.productId = pm.idProduct\nORDER BY st.transferDate DESC\n',
+        'tables': ['tbl_StockTransfer', 'tbl_Warehouse', 'tbl_ProductMaster'],
+        'domain': 'Inventory',
+        'explanation': 'Displays stock transfers with source and destination warehouse names and product details.'
+    },
+    {
+        'nl': 'Show total outstanding amount by customer aging',
+        'sql': "SELECT o.firmName,\n       SUM(CASE WHEN DATEDIFF(DAY, sih.invoiceDate, GETDATE()) <= 30 THEN sih.grandTotal ELSE 0 END) AS '0-30 Days',\n       SUM(CASE WHEN DATEDIFF(DAY, sih.invoiceDate, GETDATE()) BETWEEN 31 AND 60 THEN sih.grandTotal ELSE 0 END) AS '31-60 Days',\n       SUM(CASE WHEN DATEDIFF(DAY, sih.invoiceDate, GETDATE()) > 60 THEN sih.grandTotal ELSE 0 END) AS '60+ Days'\nFROM tbl_SaleInvoiceHeader sih\nJOIN tbl_Organization o ON sih.dealerOrgId = o.idOrganization\nJOIN dim_Status s ON sih.statusId = s.idStatus\nWHERE s.statusName NOT IN ('Paid', 'Cancelled')\nGROUP BY o.firmName\nORDER BY SUM(sih.grandTotal) DESC\n",
+        'tables': ['tbl_SaleInvoiceHeader', 'tbl_Organization', 'dim_Status'],
+        'domain': 'Finance',
+        'explanation': 'Aging analysis of outstanding receivables grouped into 30/60/60+ day buckets.'
     }
 ]
 
@@ -851,6 +1236,86 @@ BUSINESS_RULES_DATA = [
             'tbl_VendorEvaluation',
             'tbl_Organization'
         ]
+    },
+    {
+        'name': 'leave_overlap_check',
+        'description': 'Employee cannot have overlapping leave applications for the same period',
+        'category': 'hr',
+        'severity': 'error',
+        'applies_to': ['tbl_LeaveApplication'],
+        'condition': 'EXISTS (SELECT 1 FROM tbl_LeaveApplication AS dup WHERE dup.employeeId = tbl_LeaveApplication.employeeId AND dup.idLeaveApplication != tbl_LeaveApplication.idLeaveApplication AND dup.fromDate <= tbl_LeaveApplication.toDate AND dup.toDate >= tbl_LeaveApplication.fromDate AND dup.statusId IN (SELECT idStatus FROM dim_Status WHERE statusCode IN (\'APPROVED\', \'PENDING\')))',
+        'error_message': 'Employee already has an approved or pending leave application for an overlapping period.',
+        'related_tables': ['tbl_LeaveApplication', 'tbl_Employee', 'dim_Status']
+    },
+    {
+        'name': 'attendance_duplicate_check',
+        'description': 'Employee cannot have duplicate attendance entries for the same date',
+        'category': 'hr',
+        'severity': 'error',
+        'applies_to': ['tbl_Attendance'],
+        'condition': 'EXISTS (SELECT 1 FROM tbl_Attendance AS dup WHERE dup.employeeId = tbl_Attendance.employeeId AND dup.attendanceDate = tbl_Attendance.attendanceDate AND dup.idAttendance != tbl_Attendance.idAttendance)',
+        'error_message': 'Duplicate attendance entry for this employee on the same date.',
+        'related_tables': ['tbl_Attendance', 'tbl_Employee']
+    },
+    {
+        'name': 'sales_return_approval',
+        'description': 'Sales return exceeding a threshold requires managerial approval before processing',
+        'category': 'sales',
+        'severity': 'warning',
+        'applies_to': ['tbl_SaleReturn'],
+        'condition': 'totalAmount > 10000 AND statusId NOT IN (SELECT idStatus FROM dim_Status WHERE statusCode = \'APPROVED\')',
+        'error_message': 'Sales return above INR 10,000 requires approval before processing.',
+        'related_tables': ['tbl_SaleReturn', 'tbl_SaleInvoiceHeader', 'dim_Status']
+    },
+    {
+        'name': 'purchase_schedule_matching',
+        'description': 'Purchase schedule quantity should not exceed the purchase order remaining quantity',
+        'category': 'purchase',
+        'severity': 'error',
+        'applies_to': ['tbl_PurchaseSchedule'],
+        'condition': 'quantity > (SELECT COALESCE(po.totalQty - SUM(ps2.quantity), 0) FROM tbl_PurchaseOrder po LEFT JOIN tbl_PurchaseSchedule ps2 ON po.idPurchaseOrder = ps2.purchaseOrderId AND ps2.idSchedule != tbl_PurchaseSchedule.idSchedule WHERE po.idPurchaseOrder = tbl_PurchaseSchedule.purchaseOrderId)',
+        'error_message': 'Schedule quantity exceeds the remaining purchase order quantity.',
+        'related_tables': ['tbl_PurchaseSchedule', 'tbl_PurchaseOrder']
+    },
+    {
+        'name': 'payment_made_exceeds_invoice',
+        'description': 'Payment made to a vendor should not exceed the linked purchase invoice amount',
+        'category': 'finance',
+        'severity': 'warning',
+        'applies_to': ['tbl_PaymentMade'],
+        'condition': 'amount > (SELECT COALESCE(SUM(pi.totalAmount), 0) FROM tbl_PurchaseInvoice pi JOIN tbl_PaymentMade pm2 ON pi.vendorId = pm2.vendorId WHERE pi.vendorId = tbl_PaymentMade.vendorId AND pi.statusId IN (SELECT idStatus FROM dim_Status WHERE statusCode != \'CANCELLED\'))',
+        'error_message': 'Payment amount may exceed the total outstanding purchase invoices for this vendor.',
+        'related_tables': ['tbl_PaymentMade', 'tbl_PurchaseInvoice', 'tbl_Organization']
+    },
+    {
+        'name': 'booking_cancellation_check',
+        'description': 'Booking with pending deliveries cannot be cancelled',
+        'category': 'sales',
+        'severity': 'error',
+        'applies_to': ['tbl_Booking', 'tbl_BookingDelivery'],
+        'condition': 'EXISTS (SELECT 1 FROM tbl_BookingDelivery bd WHERE bd.bookingId = tbl_Booking.idBooking AND bd.statusId IN (SELECT idStatus FROM dim_Status WHERE statusCode IN (\'PENDING\', \'IN_PROGRESS\')))',
+        'error_message': 'Cannot cancel booking with pending or in-progress deliveries.',
+        'related_tables': ['tbl_Booking', 'tbl_BookingDelivery', 'dim_Status']
+    },
+    {
+        'name': 'negative_stock_adjustment',
+        'description': 'Inventory adjustments reducing stock must be within available quantity',
+        'category': 'inventory',
+        'severity': 'error',
+        'applies_to': ['tbl_InventoryAdjustment'],
+        'condition': 'adjustmentType = \'REDUCE\' AND quantity > (SELECT COALESCE(SUM(closingQty), 0) FROM tbl_StockLedger WHERE productId = tbl_InventoryAdjustment.productId AND warehouseId = tbl_InventoryAdjustment.warehouseId)',
+        'error_message': 'Adjustment quantity exceeds available stock for this product and warehouse.',
+        'related_tables': ['tbl_InventoryAdjustment', 'tbl_StockLedger', 'tbl_Warehouse']
+    },
+    {
+        'name': 'ewaybill_validity_check',
+        'description': 'E-Way Bill must be valid (not expired) for goods in transit',
+        'category': 'compliance',
+        'severity': 'error',
+        'applies_to': ['tbl_EwayBill', 'tbl_TripSheet'],
+        'condition': "validTo < GETDATE() AND tbl_EwayBill.ewayBillNo IS NOT NULL AND EXISTS (SELECT 1 FROM tbl_TripSheet WHERE ewayBillId = tbl_EwayBill.idEwayBill AND tripStatusId IN (SELECT idStatus FROM dim_Status WHERE statusCode = 'IN_TRANSIT'))",
+        'error_message': 'E-Way Bill has expired while goods are still in transit.',
+        'related_tables': ['tbl_EwayBill', 'tbl_TripSheet', 'dim_Status']
     }
 ]
 
@@ -950,6 +1415,69 @@ SQL_PATTERNS_DATA = [
             'tbl_PurchaseInvoice'
         ],
         'intent': 'Compare total sales vs purchases for this month'
+    },
+    {
+        'category': 'leave_balance',
+        'description': 'Calculate remaining leave balance per employee and leave type',
+        'sql_template': "SELECT e.firstName + ' ' + e.lastName AS employeeName,\n       lt.leaveCode, lt.maxDays,\n       (lt.maxDays - COALESCE(SUM(la.totalDays), 0)) AS balanceDays\nFROM tbl_Employee e CROSS JOIN tbl_LeaveType lt\nLEFT JOIN tbl_LeaveApplication la ON e.idEmployee = la.employeeId AND la.leaveTypeId = lt.idLeaveType\n    AND YEAR(la.fromDate) = YEAR(GETDATE())\nGROUP BY e.firstName, e.lastName, lt.leaveCode, lt.maxDays\n",
+        'tables': ['tbl_Employee', 'tbl_LeaveType', 'tbl_LeaveApplication'],
+        'intent': 'How many leave days does employee X have remaining?'
+    },
+    {
+        'category': 'payroll_summary',
+        'description': 'Monthly payroll summary with gross, deductions, and net pay totals',
+        'sql_template': "SELECT ph.payMonth, COUNT(DISTINCT pd.employeeId) AS totalEmployees,\n       SUM(pd.grossPay) AS totalGross, SUM(pd.totalDeductions) AS totalDeductions,\n       SUM(pd.netPay) AS totalNetPay\nFROM tbl_PayrollHeader ph JOIN tbl_PayrollDetail pd ON ph.idPayrollHeader = pd.payrollHeaderId\nWHERE MONTH(ph.payPeriodStart) = @month AND YEAR(ph.payPeriodStart) = @year\nGROUP BY ph.payMonth\n",
+        'tables': ['tbl_PayrollHeader', 'tbl_PayrollDetail'],
+        'intent': 'Show me the payroll summary for January 2024'
+    },
+    {
+        'category': 'stock_movement',
+        'description': 'Stock movement history for a product with transaction type',
+        'sql_template': "SELECT transactionDate, transactionType, inwardQty, outwardQty, closingQty\nFROM tbl_StockLedger\nWHERE productId = @product_id\n  AND transactionDate BETWEEN @start_date AND @end_date\nORDER BY transactionDate\n",
+        'tables': ['tbl_StockLedger'],
+        'intent': 'Show the stock movement for product X over the last month'
+    },
+    {
+        'category': 'trend_monthly',
+        'description': 'Monthly trend aggregation for any metric with year comparison',
+        'sql_template': "SELECT DATENAME(MONTH, @date_column) AS monthName,\n       MONTH(@date_column) AS monthNum, COUNT(*) AS recordCount,\n       SUM(@metric_column) AS totalMetric\nFROM @table_name\nWHERE YEAR(@date_column) = @year\nGROUP BY MONTH(@date_column), DATENAME(MONTH, @date_column)\nORDER BY MONTH(@date_column)\n",
+        'tables': [],
+        'intent': 'Show me the monthly sales trend for 2024'
+    },
+    {
+        'category': 'aging_analysis',
+        'description': 'Receivables/payables aging broken into 30/60/90+ day buckets',
+        'sql_template': "SELECT o.firmName,\n       SUM(CASE WHEN DATEDIFF(DAY, @date_column, GETDATE()) <= 30 THEN @amount_column ELSE 0 END) AS '0-30 Days',\n       SUM(CASE WHEN DATEDIFF(DAY, @date_column, GETDATE()) BETWEEN 31 AND 60 THEN @amount_column ELSE 0 END) AS '31-60 Days',\n       SUM(CASE WHEN DATEDIFF(DAY, @date_column, GETDATE()) BETWEEN 61 AND 90 THEN @amount_column ELSE 0 END) AS '61-90 Days',\n       SUM(CASE WHEN DATEDIFF(DAY, @date_column, GETDATE()) > 90 THEN @amount_column ELSE 0 END) AS '90+ Days'\nFROM @table_name t JOIN tbl_Organization o ON t.@org_fk = o.idOrganization\nJOIN dim_Status s ON t.statusId = s.idStatus\nWHERE s.statusName NOT IN ('Paid', 'Cancelled')\nGROUP BY o.firmName\nORDER BY SUM(@amount_column) DESC\n",
+        'tables': ['tbl_Organization', 'dim_Status'],
+        'intent': 'Show me the aging report of outstanding invoices'
+    },
+    {
+        'category': 'hr_headcount',
+        'description': 'Employee headcount grouped by department or designation',
+        'sql_template': "SELECT d.departmentName, COUNT(e.idEmployee) AS headcount\nFROM tbl_Employee e JOIN tbl_Department d ON e.departmentId = d.idDepartment\nWHERE e.isActive = 1\nGROUP BY d.departmentName\nORDER BY headcount DESC\n",
+        'tables': ['tbl_Employee', 'tbl_Department'],
+        'intent': 'How many employees are in each department?'
+    },
+    {
+        'category': 'tds_summary',
+        'description': 'TDS deduction summary grouped by section',
+        'sql_template': 'SELECT tdsSection, SUM(tdsAmount) AS totalTds, COUNT(*) AS transactionCount\nFROM tbl_TDSDeduction\nWHERE YEAR(tdsDate) = @year\nGROUP BY tdsSection\nORDER BY tdsSection\n',
+        'tables': ['tbl_TDSDeduction'],
+        'intent': 'How much TDS was deducted under each section this year?'
+    },
+    {
+        'category': 'running_balance',
+        'description': 'Running balance calculation for ledger entries',
+        'sql_template': "SELECT transactionDate, particulars, debit, credit,\n       SUM(debit - credit) OVER (ORDER BY transactionDate, idLedger) AS runningBalance\nFROM tbl_AccountLedger\nWHERE accountGroupId = @account_group_id\nORDER BY transactionDate\n",
+        'tables': ['tbl_AccountLedger'],
+        'intent': 'Show the ledger with running balance for account X'
+    },
+    {
+        'category': 'product_pricing_check',
+        'description': 'Compare product pricing against global rates to find discrepancies',
+        'sql_template': "SELECT pm.productName, pg.gradeName, pp.unitPrice,\n       gsr.saleRate, gpr.purchaseRate\nFROM tbl_ProductPricing pp\nJOIN tbl_ProductMaster pm ON pp.productId = pm.idProduct\nJOIN tbl_ProductGrade pg ON pp.gradeId = pg.idGrade\nLEFT JOIN tbl_GlobalSaleRate gsr ON pp.productId = gsr.productId AND pp.gradeId = gsr.gradeId\nLEFT JOIN tbl_GlobalPurchaseRate gpr ON pp.productId = gpr.productId AND pp.gradeId = gpr.gradeId\nWHERE pp.isActive = 1 AND (pp.unitPrice > gsr.saleRate OR pp.unitPrice < gpr.purchaseRate)\n",
+        'tables': ['tbl_ProductPricing', 'tbl_ProductMaster', 'tbl_ProductGrade', 'tbl_GlobalSaleRate', 'tbl_GlobalPurchaseRate'],
+        'intent': 'Find products where pricing is outside global rate ranges'
     }
 ]
 
@@ -961,8 +1489,8 @@ STATS_DATA = {
     'total_intents': 388,
     'total_joins': 149,
     'total_domains': 14,
-    'total_rules': 12,
-    'total_glossary_terms': 17,
-    'total_sql_patterns': 10,
-    'total_examples': 10
+    'total_rules': 20,
+    'total_glossary_terms': 42,
+    'total_sql_patterns': 19,
+    'total_examples': 25
 }
