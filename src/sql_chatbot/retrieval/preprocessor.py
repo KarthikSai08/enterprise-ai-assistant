@@ -11,13 +11,14 @@ _SKIP_TYPOS = frozenset({
 })
 
 class QueryPreprocessor:
-    def __init__(self, all_terms: set[str], glossary: dict):
+    def __init__(self, all_terms: set[str], glossary: dict, value_corrections: dict[str, str] | None = None):
         self._all_terms = all_terms
         self._glossary_expansion: dict[str, list[str]] = {}
         for term, info in glossary.items():
             synonyms = info.get("synonyms", []) if isinstance(info, dict) else []
             for syn in synonyms:
                 self._glossary_expansion.setdefault(syn.lower(), []).append(term.lower())
+        self._value_corrections = value_corrections or {}
         self._typo_cache: dict[str, str] = {}
         self._tokenizer = SQLTokenizer(remove_stopwords=False, keep_full_identifiers=True)
 
@@ -53,6 +54,15 @@ class QueryPreprocessor:
         result = " ".join(corrected)
         self._typo_cache[query] = result
         return result
+
+    def correct_values(self, query: str) -> str:
+        ql = query.lower()
+        result_parts = ql.split()
+        for i, word in enumerate(result_parts):
+            cleaned = word.strip(".,!?;:'\"")
+            if cleaned in self._value_corrections:
+                result_parts[i] = word.replace(cleaned, self._value_corrections[cleaned], 1)
+        return " ".join(result_parts)
 
     def expand_query(self, query: str) -> str:
         ql = query.lower()

@@ -17,6 +17,7 @@ from sql_chatbot.config import (
     DB_SERVER,DB_NAME,DB_USER,
     DB_PASS, DB_USE_WINDOWS_AUTH,DB_SCHEMA,
 )
+from flashtext2 import KeywordProcessor
 from sql_chatbot.metadata.loader import build
 from sql_chatbot.retrieval.bm25 import BM25
 from sql_chatbot.retrieval.reranker import Reranker
@@ -25,7 +26,8 @@ from sql_chatbot.retrieval.preprocessor import QueryPreprocessor
 from sql_chatbot.retrieval.domain_detector import DomainDetector
 from sql_chatbot.retrieval.join_graph import JoinGraph
 from sql_chatbot.intent.detector import detect_intent
-
+from sql_chatbot.retrieval.entity_value_extractor import EntityValueExtractor, _VALUE_CORRECTIONS_LOWER
+from sql_chatbot.retrieval.value_filter_extractor import extract_value_filters
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +56,7 @@ class Retriever:
         self.rules = data.get("rules", [])
         self.column_texts = data.get("column_texts", {})
         self.join_graph = JoinGraph(self.joins, self.tables)
+        self.entity_value_extractor = EntityValueExtractor(self.tables)
 
         texts = {name: t["text"] for name, t in self.tables.items()}
 
@@ -78,8 +81,8 @@ class Retriever:
             self.bm25_columns = BM25()
 
         all_terms = self._build_term_vocabulary()
-        self.preprocessor = QueryPreprocessor(all_terms, self.glossary)
-
+        self.preprocessor = QueryPreprocessor(all_terms, self.glossary, _VALUE_CORRECTIONS_LOWER)
+        self._build_keyword_index()
         self.domain_detector = DomainDetector(self.domains, self.tables, self.vector.encoder)
         if self.domain_detector.centroid_count:
             logger.info("Built %d domain centroids", self.domain_detector.centroid_count)
@@ -92,18 +95,22 @@ class Retriever:
                     cs = f"DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={DB_SERVER};DATABASE={DB_NAME};Trusted_Connection=yes;TrustServerCertificate=yes;"
                 else:
                     cs = f"DRIVER={{ODBC Driver 17 for SQL Server}};SERVER={DB_SERVER};DATABASE={DB_NAME};UID={DB_USER};PWD={DB_PASS};TrustServerCertificate=yes;"
-                conn = pyodbc.connect(cs, timeout=10)
-                cursor = conn.cursor()
-                cursor.execute("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_TYPE = 'BASE TABLE'", DB_SCHEMA)
-                row = cursor.fetchone()
-                live_count = row[0] if row else 0
-                kb_count = len(self.tables)
-                if live_count != kb_count:
-                    logger.warning("KB has %d tables, live DB has %d", kb_count, live_count)
-                else:
-                    logger.info("Live DB OK (%d tables match)", live_count)
-                self.db_connected = True
-                conn.close()
+                conn = None
+                try:
+                    conn = pyodbc.connect(cs, timeout=10)
+                    cursor = conn.cursor()
+                    cursor.execute("SELECT COUNT(*) FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_TYPE = 'BASE TABLE'", DB_SCHEMA)
+                    row = cursor.fetchone()
+                    live_count = row[0] if row else 0
+                    kb_count = len(self.tables)
+                    if live_count != kb_count:
+                        logger.warning("KB has %d tables, live DB has %d", kb_count, live_count)
+                    else:
+                        logger.info("Live DB OK (%d tables match)", live_count)
+                    self.db_connected = True
+                finally:
+                    if conn is not None:
+                        conn.close()
             except Exception as e:
                 logger.warning("Live DB: %s", e)
 
@@ -158,6 +165,29 @@ class Retriever:
                     terms.add(re.sub(r"[^a-z0-9]", "", s.lower()))
         return terms
 
+    def _build_keyword_index(self):
+        self.keyword_processor = KeywordProcessor(case_sensitive=False)
+        self.keyword_to_tables : dict[str, set[str]] ={}
+
+        for name, tbl in self.tables.items():
+            kws = {k.lower() for k in tbl.get("all_search_terms", []) if len(k) > 2}
+            for c in tbl.get("columns", []):
+                for v in c.get("sample_values", []):
+                    sv = str(v).lower()
+                    if len(sv) > 2:
+                        kws.add(sv)
+            for kw in kws:
+                self.keyword_to_tables.setdefault(kw, set()).add(name)
+
+        for kw in self.keyword_to_tables:
+            self.keyword_processor.add_keyword(kw)
+
+        logger.info(
+            "Indexed %d unique keywords across %d tables (flashtext2)",
+            len(self.keyword_to_tables), len(self.tables)
+        )
+
+
     @staticmethod
     def _is_relevant(domain_hit: bool, keyword_hit: bool, top_score: float) -> bool:
         return domain_hit or keyword_hit or top_score >= 0.3
@@ -169,7 +199,8 @@ class Retriever:
         search_query = intent_info.get("entity", query)
 
         expanded = self.preprocessor.expand_query(search_query)
-        corrected = self.preprocessor.correct_typos(expanded)
+        value_corrected = self.preprocessor.correct_values(expanded)
+        corrected = self.preprocessor.correct_typos(value_corrected)
 
         qn = QueryPreprocessor.normalize_query(corrected)
         ql = corrected
@@ -238,6 +269,9 @@ class Retriever:
         }
 
         qw = {w for w in ql.split() if w not in STOPWORDS}
+
+        matched_phrases = set(self.keyword_processor.extract_keywords(ql.lower()))
+
         keyword_hit = False
         keyword_scores = {}
         for name, tbl in self.tables.items():
@@ -251,9 +285,10 @@ class Retriever:
             for sv in sample_vals:
                 if sv in ql.lower():
                     kws.append(sv)
+
             matched_words = set()
             for kw in kws:
-                if re.search(rf"\b{re.escape(kw)}\b", ql):
+                if kw in matched_phrases:               
                     matched_words.add(kw)
                 else:
                     kw_words = [w for w in kw.split() if len(w) > 2]
@@ -277,6 +312,20 @@ class Retriever:
             else:
                 rrf[name] = boost + KEYWORD_NULL_TABLE_BASE
 
+        detected_entities = self.entity_value_extractor.detect_entities(query)
+        resolved = self.entity_value_extractor.resolve_locked_tables(detected_entities)
+        locked_tables = resolved["locked"]
+        suppress_tables = resolved["suppress"]
+
+        if locked_tables:
+            for master in locked_tables:
+                current = rrf.get(master, 0)
+                rrf[master] = max(current, (max(rrf.values()) if rrf else 1.0) * 1.1)
+            for sibling in suppress_tables:
+                rrf.pop(sibling, None)
+
+        detected_filters = extract_value_filters(query)
+
         candidates = sorted(rrf.items(), key=lambda x: (-x[1], -search_weights.get(x[0], 1.0)))[:rrf_k]
 
         top_score = candidates[0][1] if candidates else 0
@@ -295,6 +344,8 @@ class Retriever:
                 "joins": [],
                 "summary_columns": [],
                 "table_count": 0,
+                "detected_entities": [],
+                "detected_filters": [],
                 "_debug": "",
                 "latency_ms": round((time.perf_counter() - t0) * 1000, 1),
                 "confidence": 0.0,
@@ -331,6 +382,8 @@ class Retriever:
                 "joins": [],
                 "summary_columns": [],
                 "table_count": 0,
+                "detected_entities": [],
+                "detected_filters": [],
                 "_debug": "",
                 "latency_ms": round((time.perf_counter() - t0) * 1000, 1),
                 "confidence": confidence,
@@ -351,7 +404,7 @@ class Retriever:
                     tbl, col = parts
                     col_lookup.setdefault(tbl, []).append(col)
 
-        col_cap = 3 if query_type == "simple_agg" else 5
+        col_cap = 3 if query_type == "simple_agg" else 10
         results = []
         for name, score in reranked:
             effective_threshold = KEYWORD_SCORE_THRESHOLD if (keyword_hit and name in keyword_scores) else SCORE_THRESHOLD
@@ -371,6 +424,21 @@ class Retriever:
                     cols.remove(cname)
                 cols.insert(0, cname)
 
+            q_words = {w.lower() for w in query.split() if len(w) > 2}
+            boosted = []
+            for cn in list(cols[len(priority_cols):]):
+                ci = next((c for c in t.get("columns", []) if c["name"] == cn), None)
+                if not ci:
+                    continue
+                svals = [str(v).lower() for v in ci.get("sample_values", []) if len(str(v)) > 2]
+                checks = [cn.lower()] + [a.lower() for a in ci.get("aliases", [])] + [kw.lower() for kw in ci.get("search_keywords", [])] + svals
+                if any(any(qw in chk or chk in qw for qw in q_words) for chk in checks if chk):
+                    cols.remove(cn)
+                    boosted.append(cn)
+            ipos = min(len(priority_cols), len(cols))
+            for i, cn in enumerate(boosted):
+                cols.insert(ipos + i, cn)
+
             table_joins = [
                 j for j in self.joins
                 if j["from"] == name or j["to"] == name
@@ -381,6 +449,12 @@ class Retriever:
                 affected = rule.get("tables", [])
                 if name in affected:
                     matching_rules.append(rule.get("description", ""))
+
+            for de in detected_entities:
+                if de["table"] == name and de["column"] not in cols[:col_cap]:
+                    if de["column"] in cols:
+                        cols.remove(de["column"])
+                        cols.insert(0, de["column"])
 
             column_samples = {}
             for c in t.get("columns", []):
@@ -442,6 +516,41 @@ class Retriever:
                 "bridge": True,
             })
 
+        result_table_names = {r["table"] for r in results}
+        if locked_tables:
+            for name in locked_tables:
+                if name in result_table_names:
+                    continue
+                t = self.tables.get(name, {})
+                if not t:
+                    continue
+                cols = self._match_columns(query, name, t.get("columns", [])) or [c["name"] for c in t.get("columns", [])[:3]]
+                column_samples = {}
+                for c in t.get("columns", []):
+                    vals = c.get("sample_values", [])
+                    if vals:
+                        column_samples[c["name"]] = vals
+                results.append({
+                    "rank": len(results) + 1,
+                    "table": name,
+                    "display_name": t.get("display_name", ""),
+                    "score": 0.0,
+                    "domain": t.get("domain", ""),
+                    "description": t.get("description", ""),
+                    "columns": cols[:col_cap],
+                    "all_columns": [c["name"] for c in t.get("columns", [])],
+                    "column_samples": column_samples,
+                    "important_columns": t.get("important_columns", []),
+                    "common_filters": t.get("common_filters", []),
+                    "common_groupby": t.get("common_groupby", []),
+                    "suggested_joins": [j for j in self.joins if j["from"] == name or j["to"] == name][:3],
+                    "matching_rules": [],
+                    "primary_key": t.get("primary_key", ""),
+                    "foreign_keys": t.get("foreign_keys", []),
+                    "estimated_rows": t.get("estimated_rows", 0),
+                    "entity_locked": True,
+                })
+
         matched_ops = []
         for kw, label in AGGREGATION_TYPES.items():
             if kw in ql:
@@ -494,6 +603,8 @@ class Retriever:
             "joins": joins,
             "summary_columns": all_cols,
             "table_count": len(results),
+            "detected_entities": detected_entities,
+            "detected_filters": detected_filters,
             "latency_ms": round((time.perf_counter() - t0) * 1000, 1),
             "query_type": query_type,
             "confidence": confidence,
@@ -538,7 +649,7 @@ class Retriever:
                     found.append(c["name"])
                 if len(found) >= 2:
                     break
-            return found or [columns[0]["name"]]
+            return found or ([columns[0]["name"]] if columns else [])
 
         scored = []
         for c in columns:
