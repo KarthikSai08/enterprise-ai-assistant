@@ -1,8 +1,11 @@
 import json
+import logging
 import re
 
 from sql_chatbot.config import LLM_PROVIDER, GROQ_API_KEY
 from sql_chatbot.generation.llm_client import call_llm
+
+logger = logging.getLogger(__name__)
 
 _JSON_EXTRACT = re.compile(r"```(?:json)?\s*([\s\S]*?)\s*```", re.I)
 
@@ -68,8 +71,8 @@ def detect_intent_llm(query: str) -> dict | None:
         if "entity" in data and data["entity"]:
             data["source"] = "llm"
             return data
-    except Exception:
-        pass
+    except Exception as e:
+        logger.warning("Intent detection LLM fallback failed: %s", e)
     return None
 
 

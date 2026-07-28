@@ -58,7 +58,9 @@ class HealthResponse(BaseModel):
 
 @app.get("/health", response_model=HealthResponse)
 async def health():
-    ret = app.state.retriever
+    ret = getattr(app.state, "retriever", None)
+    if ret is None:
+        return HealthResponse(status="degraded")
     col_count = sum(len(t.get("columns", [])) for t in ret.tables.values())
     return HealthResponse(
         status="ok",

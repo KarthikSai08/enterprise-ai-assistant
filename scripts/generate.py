@@ -11,6 +11,7 @@ from kb_bootstrap_data import (
     DOMAINS_DATA, GLOSSARY_DATA, EXAMPLES_DATA,
     BUSINESS_RULES_DATA, SQL_PATTERNS_DATA, STATS_DATA,
 )
+from terms_data import TERMS_DATA
 
 load_dotenv(Path(__file__).resolve().parent.parent / ".env")
 
@@ -79,7 +80,7 @@ for tbl in TABLE_META:
 for col in ["invoiceDate", "orderDate", "bookingDate", "receiptDate", "paymentDate",
             "voucherDate", "returnDate", "enquiryDate", "attendanceDate", "testDate",
             "evaluationDate", "adjustmentDate", "countDate", "transferDate", "tripDate",
-            "deliveryDate", "startDate", "endDate"]:
+            "deliveryDate", "startDate", "endDate", "occurredOn"]:
     COLUMN_META.setdefault(("", col), {
         "description": "Date of the transaction", "role": "dimension", "importance": "high",
         "aliases": [col.replace("Date", " date"), "transaction date"],
@@ -357,7 +358,6 @@ _SAMPLE_VALUE_PATTERNS: dict[str, list[str]] = {
     "maritalstatus": ["Married", "Unmarried", "Divorced"],
     "bloodgroup": ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"],
     "employmenttype": ["Permanent", "Contract", "Temporary", "Intern", "Probation"],
-    "worklocation": ["Mumbai", "Delhi", "Bangalore", "Pune", "Ahmedabad", "Chennai", "Kolkata", "Hyderabad"],
     "yesno": ["Yes", "No"],
     "truefalse": ["true", "false"],
     "activeinactive": ["Active", "Inactive"],
@@ -479,6 +479,8 @@ def _auto_fill_column(col_name: str, datatype: str, role: str, existing: dict) -
         out["aggregations_allowed"] = _auto_fill_aggregations_allowed(datatype, role)
     if out.get("aggregatable") and not out.get("aggregations_allowed"):
         out["aggregations_allowed"] = _auto_fill_aggregations_allowed(datatype, role)
+    if out.get("aggregations_allowed") and not out.get("aggregatable"):
+        out["aggregatable"] = True
     if not out.get("sample_values"):
         out["sample_values"] = _auto_fill_sample_values(col_name)
     if not out.get("search_keywords"):
@@ -658,13 +660,15 @@ def merge():
         col_entries = []
         for col in columns:
             cname = col["name"]
+            col_datatype = col.get("type", col.get("datatype", "varchar"))
             cm = COLUMN_META.get((table_name, cname), COLUMN_META.get(("", cname), {}))
             if cname == "isActive":
-                cm = ACTIVE_ALIASES
+                cm = dict(ACTIVE_ALIASES)
+                if col_datatype == "bit":
+                    cm["sample_values"] = [1, 0]
             is_pk = cname == table_yaml["primary_key"] or col.get("is_primary_key", False)
 
             col_role = cm.get("role", "attribute")
-            col_datatype = col.get("type", col.get("datatype", "varchar"))
 
             entry = {
                 "name": cname,
@@ -732,6 +736,12 @@ def write_bootstrap_data():
     # SQL Patterns
     _write_yaml(patterns_dir / "sql_patterns.yaml", {"patterns": SQL_PATTERNS_DATA})
     print(f"  sql_patterns.yaml ({len(SQL_PATTERNS_DATA)} patterns)")
+
+    # Terms
+    terms_dir = BASE / "terms"
+    terms_dir.mkdir(parents=True, exist_ok=True)
+    _write_yaml(terms_dir / "terms.yaml", TERMS_DATA)
+    print(f"  terms.yaml ({sum(len(v) for v in TERMS_DATA.values())} entries)")
 
     # Stats — compute from actual data
     table_count = len(list((BASE / "tables").glob("*.yaml")))
