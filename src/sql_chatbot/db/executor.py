@@ -1,5 +1,7 @@
-import re
-import pyodbc
+from urllib.parse import quote_plus
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine
+from sqlalchemy.exc import SQLAlchemyError
 import sqlglot
 from sqlglot import exp
 import logging
@@ -108,43 +110,59 @@ def validate_and_cap(sql: str, valid_columns: set[str] | None, max_rows: int = 1
         _validate_columns_ast(tree, valid_columns)
     return _cap_top(tree, max_rows)
 
-def _get_collection():
+_engine: Engine | None = None
+
+
+def _get_engine() -> Engine:
+    global _engine
+    if _engine is not None:
+        return _engine
     if not DB_SERVER or not DB_NAME:
         raise DBConnectionError("Database not configured. Set DB_SERVER and DB_NAME in .env")
     if DB_USE_WINDOWS_AUTH:
-        cs = (
+        odbc_str = (
             f"DRIVER={{ODBC Driver 17 for SQL Server}};"
             f"SERVER={DB_SERVER};DATABASE={DB_NAME};Trusted_Connection=yes;"
             f"TrustServerCertificate=yes;"
         )
     else:
-        cs = (
+        odbc_str = (
             f"DRIVER={{ODBC Driver 17 for SQL Server}};"
             f"SERVER={DB_SERVER};DATABASE={DB_NAME};UID={DB_USER};PWD={DB_PASS};"
             f"TrustServerCertificate=yes;"
         )
-    return pyodbc.connect(cs, timeout=60)
+    connect_url = f"mssql+pyodbc:///?odbc_connect={quote_plus(odbc_str)}"
+    _engine = create_engine(
+        connect_url,
+        pool_size=5,
+        max_overflow=10,
+        pool_pre_ping=True,
+        pool_recycle=1800,
+        connect_args={"timeout": 30},
+    )
+    return _engine
 
 def execute_query(sql: str, valid_columns: set[str] | None = None, valid_tables: set[str] | None = None) -> dict:
     check_not_supported(sql)
     safe_sql = validate_and_cap(sql, valid_columns)
     try:
-        conn = _get_collection()
-        cursor = conn.cursor()
-        cursor.execute(safe_sql)
-        columns = [desc[0] for desc in cursor.description] if cursor.description else []
-        rows = [list(row) for row in cursor.fetchall()]
-        conn.close()
+        engine = _get_engine()
+        with engine.connect() as conn:
+            result = conn.execute(text(safe_sql))
+            columns = list(result.keys()) if result.returns_rows else []
+            rows = [list(row) for row in result.fetchall()]
         return {
-            "sql" : safe_sql,
-            "columns" : columns,
-            "rows" : rows,
-            "row_count" : len(rows),
-            "error" : None
+            "sql": safe_sql,
+            "columns": columns,
+            "rows": rows,
+            "row_count": len(rows),
+            "error": None,
         }
     except SQLValidationError:
         raise
     except DBConnectionError:
         raise
+    except SQLAlchemyError as e:
+        raise SQLQueryExecutionError(str(e))
     except Exception as e:
         raise SQLQueryExecutionError(str(e))
