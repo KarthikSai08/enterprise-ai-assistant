@@ -766,9 +766,9 @@ TABLE_META = {
             "Loading sheet for dispatch",
             "Products loaded today"
         ],
-        "important_columns": ["loadingDate", "productId", "quantity", "packageCount", "packageType"],
-        "business_metrics": ["quantity", "packageCount"],
-        "common_filters": ["tripId", "loadingDate"],
+        "important_columns": ["tripId", "productId", "quantity", "loadingWeight", "unloadingWeight", "netWeight"],
+        "business_metrics": ["quantity"],
+        "common_filters": ["tripId", "productId"],
         "common_groupby": ["tripId", "productId"],
     },
     "tbl_OrgAddress": {
@@ -907,10 +907,10 @@ TABLE_META = {
             "PAN details for company Z",
             "Registration by state"
         ],
-        "important_columns": ["organizationId", "gstin", "pan", "registrationType"],
+        "important_columns": ["organizationId", "regType", "regNumber"],
         "business_metrics": [],
-        "common_filters": ["organizationId", "registrationType"],
-        "common_groupby": ["registrationType", "stateCode"],
+        "common_filters": ["organizationId", "regType"],
+        "common_groupby": ["regType"],
     },
     "tbl_PaymentMade": {
         "display_name": "Payments Made",
@@ -992,10 +992,10 @@ TABLE_META = {
             "Salary slip for employee Z",
             "PF deduction details"
         ],
-        "important_columns": ["employeeId", "basic", "grossPay", "netPay", "pf"],
-        "business_metrics": ["basic", "hra", "da", "ta", "pf", "esi", "tds", "grossPay", "totalDeductions", "netPay"],
-        "common_filters": ["payrollHeaderId", "employeeId"],
-        "common_groupby": ["employeeId"],
+        "important_columns": ["payrollId", "componentName", "componentType", "amount"],
+        "business_metrics": ["amount"],
+        "common_filters": ["payrollId"],
+        "common_groupby": ["componentName"],
     },
     "tbl_PayrollHeader": {
         "display_name": "Payroll Headers",
@@ -1147,10 +1147,10 @@ TABLE_META = {
             "List all brands",
             "Brand-wise product count"
         ],
-        "important_columns": ["productName", "productCode", "categoryId", "classId", "gradeId", "brand", "uomId", "gstRateId", "hsnCode", "minStock", "reorderQty"],
-        "business_metrics": ["minStock", "reorderQty"],
-        "common_filters": ["isActive", "categoryId", "classId", "gradeId", "brand"],
-        "common_groupby": ["categoryId", "classId", "gradeId", "brand"],
+        "important_columns": ["productName", "productCode", "categoryId", "classId", "baseUOMId", "gstRateId", "hsnCode", "minStock", "reorderLevel"],
+        "business_metrics": ["minStock", "reorderLevel"],
+        "common_filters": ["isActive", "categoryId", "classId"],
+        "common_groupby": ["categoryId", "classId"],
     },
     "tbl_ProductPricing": {
         "display_name": "Product Pricing",
@@ -1225,10 +1225,10 @@ TABLE_META = {
             "Pending purchase bills",
             "Invoice for PO number Y"
         ],
-        "important_columns": ["invoiceNo", "invoiceDate", "vendorId", "totalAmount", "poId"],
+        "important_columns": ["piNo", "piDate", "vendorId", "totalAmount", "purchaseOrderId"],
         "business_metrics": ["totalAmount"],
-        "common_filters": ["vendorId", "invoiceDate", "poId"],
-        "common_groupby": ["vendorId", "invoiceDate"],
+        "common_filters": ["vendorId", "piDate", "purchaseOrderId"],
+        "common_groupby": ["vendorId", "piDate"],
     },
     "tbl_PurchaseOrder": {
         "display_name": "Purchase Orders",
@@ -1252,7 +1252,7 @@ TABLE_META = {
             "PO details for number Y",
             "Pending approvals for purchase orders"
         ],
-        "important_columns": ["poNumber", "poDate", "vendorId", "totalAmount", "statusId"],
+        "important_columns": ["poNo", "poDate", "vendorId", "totalAmount", "statusId"],
         "business_metrics": ["totalAmount"],
         "common_filters": ["vendorId", "poDate", "statusId"],
         "common_groupby": ["vendorId", "poDate", "statusId"],
@@ -1276,8 +1276,8 @@ TABLE_META = {
             "Purchase schedule details",
             "Delivery schedule for product Y"
         ],
-        "important_columns": ["productId", "scheduleDate", "scheduleQty"],
-        "business_metrics": ["scheduleQty"],
+        "important_columns": ["productId", "scheduleDate", "quantity"],
+        "business_metrics": ["quantity"],
         "common_filters": ["productId", "scheduleDate"],
         "common_groupby": ["scheduleDate"],
     },
@@ -1299,9 +1299,9 @@ TABLE_META = {
             "Quality parameters for product Y",
             "All checklists"
         ],
-        "important_columns": ["checklistName", "productId"],
+        "important_columns": ["checklistNo", "productId"],
         "business_metrics": [],
-        "common_filters": ["productId", "isActive"],
+        "common_filters": ["productId"],
         "common_groupby": ["productId"],
     },
     "tbl_QualityParameter": {
@@ -1323,9 +1323,9 @@ TABLE_META = {
             "Parameter details",
             "Test parameters"
         ],
-        "important_columns": ["checklistId", "parameterName", "minValue", "maxValue"],
+        "important_columns": ["paramCode", "paramName", "minValue", "maxValue"],
         "business_metrics": ["minValue", "maxValue"],
-        "common_filters": ["checklistId"],
+        "common_filters": ["productId"],
         "common_groupby": [],
     },
     "tbl_QualityTestResult": {
@@ -1347,10 +1347,10 @@ TABLE_META = {
             "Test results for checklist Y",
             "Product quality history"
         ],
-        "important_columns": ["productId", "parameterId", "testDate", "testedValue", "result"],
-        "business_metrics": ["testedValue"],
-        "common_filters": ["productId", "parameterId", "testDate", "result"],
-        "common_groupby": ["productId", "result", "testDate"],
+        "important_columns": ["checklistId", "parameterId", "testValue", "result"],
+        "business_metrics": ["testValue"],
+        "common_filters": ["checklistId", "parameterId", "result"],
+        "common_groupby": ["checklistId", "parameterId", "result"],
     },
     "tbl_RateApproval": {
         "display_name": "Rate Approvals",
@@ -1371,9 +1371,9 @@ TABLE_META = {
             "Rate approval history",
             "Rate approvals this month"
         ],
-        "important_columns": ["productId", "proposedRate", "approvedRate"],
-        "business_metrics": ["proposedRate", "approvedRate"],
-        "common_filters": ["productId"],
+        "important_columns": ["rateType", "requestedRate", "approvedRate", "approvalStatus"],
+        "business_metrics": ["requestedRate", "approvedRate"],
+        "common_filters": ["rateType", "approvalStatus"],
         "common_groupby": [],
     },
     "tbl_RateBand": {
@@ -1394,9 +1394,9 @@ TABLE_META = {
             "Rate band list",
             "Volume discount brackets"
         ],
-        "important_columns": ["productId", "fromQty", "toQty", "rate"],
-        "business_metrics": ["rate"],
-        "common_filters": ["productId"],
+        "important_columns": ["globalPurchaseRateId", "bandFrom", "bandTo", "bandRate"],
+        "business_metrics": ["bandRate"],
+        "common_filters": ["globalPurchaseRateId", "isActive"],
         "common_groupby": [],
     },
     "tbl_RouteMaster": {
@@ -1442,8 +1442,8 @@ TABLE_META = {
             "Invoice item details",
             "Quantity and rate per product"
         ],
-        "important_columns": ["invoiceId", "productId", "quantity", "rate", "discount", "gstAmount", "netAmount"],
-        "business_metrics": ["quantity", "rate", "discount", "gstAmount", "netAmount"],
+        "important_columns": ["invoiceId", "productId", "quantity", "unitPrice", "discountAmt", "taxAmount", "netAmount"],
+        "business_metrics": ["quantity", "unitPrice", "discountAmt", "taxAmount", "netAmount"],
         "common_filters": ["invoiceId", "productId"],
         "common_groupby": ["invoiceId", "productId"],
     },
@@ -1481,10 +1481,10 @@ TABLE_META = {
             "Monthly sales report",
             "Sales dashboard"
         ],
-        "important_columns": ["invoiceNo", "invoiceDate", "dealerOrgId", "grandTotal", "statusId"],
+        "important_columns": ["invoiceNo", "invoiceDate", "dealerOrgId", "grandTotal"],
         "business_metrics": ["grandTotal"],
-        "common_filters": ["dealerOrgId", "invoiceDate", "statusId"],
-        "common_groupby": ["dealerOrgId", "invoiceDate", "statusId"],
+        "common_filters": ["dealerOrgId", "invoiceDate"],
+        "common_groupby": ["dealerOrgId", "invoiceDate", "invoiceType"],
     },
     "tbl_SaleOrder": {
         "display_name": "Sale Orders",
@@ -1509,10 +1509,10 @@ TABLE_META = {
             "Total orders this year",
             "Order status summary"
         ],
-        "important_columns": ["soNumber", "soDate", "deliveryDate", "customerId", "totalAmount", "statusId"],
+        "important_columns": ["orderNo", "orderDate", "organizationId", "totalAmount", "statusId", "deliveryDate"],
         "business_metrics": ["totalAmount"],
-        "common_filters": ["customerId", "soDate", "statusId"],
-        "common_groupby": ["customerId", "soDate", "statusId"],
+        "common_filters": ["organizationId", "orderDate", "statusId"],
+        "common_groupby": ["organizationId", "orderDate", "statusId"],
     },
     "tbl_SaleOrderDetail": {
         "display_name": "Sale Order Details",
@@ -1534,10 +1534,10 @@ TABLE_META = {
             "Quantity and rate per product",
             "Order item details"
         ],
-        "important_columns": ["soId", "productId", "quantity", "rate", "discount", "netAmount"],
-        "business_metrics": ["quantity", "rate", "discount", "netAmount"],
-        "common_filters": ["soId", "productId"],
-        "common_groupby": ["soId", "productId"],
+        "important_columns": ["saleOrderId", "productId", "quantity", "unitPrice", "totalAmount"],
+        "business_metrics": ["quantity", "unitPrice", "totalAmount"],
+        "common_filters": ["saleOrderId", "productId"],
+        "common_groupby": ["saleOrderId", "productId"],
     },
     "tbl_SaleReturn": {
         "display_name": "Sale Returns",
@@ -1591,8 +1591,8 @@ TABLE_META = {
             "Available quantity for product X",
             "Stock levels by product"
         ],
-        "important_columns": ["productId", "warehouseId", "openingQty", "inwardQty", "outwardQty", "closingQty"],
-        "business_metrics": ["openingQty", "inwardQty", "outwardQty", "closingQty"],
+        "important_columns": ["productId", "warehouseId", "inQty", "outQty", "balanceQty"],
+        "business_metrics": ["inQty", "outQty", "balanceQty"],
         "common_filters": ["productId", "warehouseId"],
         "common_groupby": ["productId", "warehouseId"],
     },
@@ -1667,10 +1667,10 @@ TABLE_META = {
             "Trip status report",
             "Completed trips today"
         ],
-        "important_columns": ["tripNo", "tripDate", "vehicleId", "driverId", "routeId", "tripStatusId"],
-        "business_metrics": ["loadingAmount", "unloadingAmount", "expenseAmount", "totalAmount"],
-        "common_filters": ["tripDate", "vehicleId", "driverId", "tripStatusId"],
-        "common_groupby": ["vehicleId", "driverId", "tripDate", "tripStatusId"],
+        "important_columns": ["tripNo", "tripDate", "vehicleId", "driverId", "routeId", "statusId"],
+        "business_metrics": ["totalKm"],
+        "common_filters": ["tripDate", "vehicleId", "driverId", "statusId"],
+        "common_groupby": ["vehicleId", "driverId", "tripDate", "statusId"],
     },
     "tbl_UserMaster": {
         "display_name": "User Master",
@@ -1691,10 +1691,10 @@ TABLE_META = {
             "User master data",
             "Login accounts"
         ],
-        "important_columns": ["userName", "role"],
+        "important_columns": ["userName", "userRole", "fullName"],
         "business_metrics": [],
-        "common_filters": ["isActive", "role"],
-        "common_groupby": ["role"],
+        "common_filters": ["isActive", "userRole"],
+        "common_groupby": ["userRole"],
     },
     "tbl_VendorEvaluation": {
         "display_name": "Vendor Evaluation",
@@ -1769,8 +1769,8 @@ TABLE_META = {
             "Warehouses in city Y",
             "Warehouse capacity"
         ],
-        "important_columns": ["warehouseName", "warehouseCode", "cityId", "capacity"],
-        "business_metrics": ["capacity"],
+        "important_columns": ["warehouseName", "warehouseCode", "cityId"],
+        "business_metrics": [],
         "common_filters": ["isActive", "cityId"],
         "common_groupby": ["cityId"],
     },
