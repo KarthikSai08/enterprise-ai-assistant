@@ -34,44 +34,56 @@ def _build_valid_columns(retrieval_result: dict) -> set[str]:
     return cols
 
 
-def _extract_column_hint(error: str, valid_columns: set[str], retrieval_result: dict | None = None) -> str:
-    match = re.search(r"Invalid column(?: name)? '([^']+)'", error) or re.search(r"Invalid column names? found in SQL: ([^.]*)", error)
-    if match:
-        bad_col = match.group(1)
-        candidates: set[str] = set()
-        for vc in valid_columns:
-            parts = vc.split(".")
-            if len(parts) == 2 and bad_col.lower() == parts[1].lower():
-                candidates.add(parts[0])
+def _extract_column_hint(bad_columns: list[str], valid_columns: set[str], retrieval_result: dict | None = None) -> str:
+    assert isinstance(bad_columns, list), f"bad_columns must be a list, got {type(bad_columns)}: {bad_columns!r}"
+    if not bad_columns:
+        return ""
+    hints = []
+    all_missing_tables: set[str] = set()
+
+    for raw_entry in bad_columns:
+        bad_col = raw_entry.split(".")[-1]
+        candidates = {
+            parts[0] for vc in valid_columns
+            if len(parts := vc.split(".")) == 2 and bad_col.lower() == parts[1].lower()
+        }
         if not candidates:
-            for vc in valid_columns:
-                parts = vc.split(".")
-                if len(parts) == 2 and bad_col.lower() in parts[1].lower():
-                    candidates.add(parts[0])
+            candidates = {
+                parts[0] for vc in valid_columns
+                if len(parts := vc.split(".")) == 2 and bad_col.lower() in parts[1].lower()
+            }
         if candidates:
             tbl_names = ", ".join(sorted(candidates))
-            tbl_cols: set[str] = set()
-            for vc in valid_columns:
-                parts = vc.split(".")
-                if len(parts) == 2 and parts[0] in candidates:
-                    tbl_cols.add(parts[1])
-            cols_list = ", ".join(sorted(tbl_cols))
-            hint = (
-                f"The previous SQL used '{bad_col}' but that column does not exist. "
-                f"Did you mean one of these columns on table '{tbl_names}': {cols_list}? "
-                f"Please correct the query using ONLY columns from DATABASE CONTEXT."
+            tbl_cols = {
+                parts[1] for vc in valid_columns
+                if len(parts := vc.split(".")) == 2 and parts[0] in candidates
+            }
+            hints.append(
+                f"'{raw_entry}' is wrong — '{bad_col}' belongs to table(s) '{tbl_names}' "
+                f"(columns there: {', '.join(sorted(tbl_cols))}), not the table you attached it to."
             )
             if retrieval_result:
-                missing_tables = [t for t in candidates if not any(r["table"] == t for r in retrieval_result.get("results", []))]
-                if missing_tables:
-                    hint += (
-                        f" NOTE: Tables {', '.join(missing_tables)} are valid but may not be in DATABASE CONTEXT above. "
-                        f"Only use them if they are present in the context."
-                    )
-            return hint
-        return f"The column '{bad_col}' does not exist in any table. Only use columns from DATABASE CONTEXT."
-    return ""
+                all_missing_tables.update(
+                    t for t in candidates
+                    if not any(r["table"] == t for r in retrieval_result.get("results", []))
+                )
+        else:
+            hints.append(f"'{raw_entry}' — column '{bad_col}' does not exist in any table in DATABASE CONTEXT.")
 
+    hint = " ".join(hints) + " Correct the query using ONLY columns from DATABASE CONTEXT, attached to the correct table alias."
+    if all_missing_tables:
+        hint += f" NOTE: {', '.join(sorted(all_missing_tables))} are valid tables but may not currently be listed above."
+    return hint
+
+_EXEC_ERROR_COLUMN_RE = re.compile(r"Invalid column(?: name)? '([^']+)'", re.I)
+
+def _extract_column_hint_from_exec_error(error_msg: str, valid_columns: set[str], retrieval_result: dict | None = None) -> str:
+    """For SQLQueryExecutionError (raw DB error text) — different shape than
+    the AST validator's structured bad_columns list, so parse separately."""
+    matches = _EXEC_ERROR_COLUMN_RE.findall(error_msg)
+    if not matches:
+        return ""
+    return _extract_column_hint(matches, valid_columns, retrieval_result)
 
 def run_sql_with_retry(user_query: str, retrieval_result: dict) -> dict:
     if not retrieval_result.get("results"):
@@ -96,9 +108,7 @@ def run_sql_with_retry(user_query: str, retrieval_result: dict) -> dict:
         context_joins=retrieval_result.get("joins", []),
         main_tables=result_table_names,
     )
-    # logger.info(context_str)
-    # logger.info(user_query)
-    # logger.info(prompt)
+
     try:
         sql = call_llm(prompt)
     except (RuntimeError, ValueError, requests.RequestException) as e:
@@ -126,7 +136,7 @@ def run_sql_with_retry(user_query: str, retrieval_result: dict) -> dict:
         result["not_supported"] = False
         return result
     except SQLValidationError as e:
-        hint = _extract_column_hint(str(e), valid_columns, retrieval_result)
+        hint = _extract_column_hint(e.bad_columns, valid_columns, retrieval_result)
         if hint:
             logger.warning("Column hallucination detected: %s", hint)
             retry_prompt = (
@@ -150,9 +160,10 @@ def run_sql_with_retry(user_query: str, retrieval_result: dict) -> dict:
                     result = execute_query(retry_sql, valid_columns)
                     result["not_supported"] = False
                     return result
-                except (SQLValidationError, SQLQueryExecutionError) as retry_e:
-                    logger.warning("Retry SQL also failed: %s", retry_e)
-                    pass
+                except SQLQueryExecutionError as e:
+                    logger.warning("SQL execution error (retrying): %s", e)
+                    hint = _extract_column_hint_from_exec_error(str(e), valid_columns, retrieval_result)
+                    retry_extra = f"\n{hint}\n" if hint else "\n"
         return {
             "not_supported": True,
             "sql": sql,
