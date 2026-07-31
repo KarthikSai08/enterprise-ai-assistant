@@ -1,6 +1,6 @@
 from sql_chatbot.config import is_sensitive_column
 
-def build_context_str(result: dict) -> str:
+def build_context_str(result: dict, user_query: str = "") -> str:
     fk_map: dict[str, dict[str, str]] = {}
     for r in result.get("results", []):
         tbl = r.get("table", "")
@@ -34,7 +34,7 @@ def build_context_str(result: dict) -> str:
         domain = r.get("domain", "")
 
         raw_cols = r.get("columns", []) or r.get("all_columns", [])[:20]
-        safe_cols = [c for c in raw_cols if not is_sensitive_column(c)]
+        safe_cols = [c for c in raw_cols if _should_include_column(c, user_query)]
 
         annotated = []
         for c in safe_cols:
@@ -79,6 +79,13 @@ def build_context_str(result: dict) -> str:
 
     return "\n".join(lines)
 
+def _should_include_column(col_name: str, user_query: str) -> bool:
+    if not is_sensitive_column(col_name):
+        return True
+    # If the user explicitly asks for this sensitive field in their question, allow it!
+    q_clean = user_query.lower().replace("_", "").replace(" ", "")
+    c_clean = col_name.lower().replace("_", "")
+    return any(part in q_clean for part in [c_clean, "phone", "mobile", "gst", "salary", "contact"])
 
 def build_prompt(query: str, context: str, intent: dict | None = None, dialect: str = "SQL Server",
                   detected_entities: list[dict] | None = None, detected_filters: list[dict] | None = None,
@@ -125,9 +132,6 @@ def build_prompt(query: str, context: str, intent: dict | None = None, dialect: 
                 filters_block += f'  relative date: {f["label"]}  (from: "{f["raw"]}")\n'
 
     return f"""You are a read-only T-SQL (SQL Server) generator. Convert the question into a single SELECT query using ONLY the schema below.
-{intent_hint}{entities_block}{filters_block}
-DATABASE CONTEXT (only tables/columns allowed):
-{context}
 
 STRICT RULES
 If ANY rule below cannot be satisfied, respond with EXACTLY:
@@ -167,9 +171,10 @@ NOT_SUPPORTED
    including recursive) unless explicitly requested. Table aliases must be
    short and deterministic, and must never collide with column names or
    T-SQL reserved words.
-7. NEVER add WHERE, HAVING, ON, LIKE, IN, NOT IN, BETWEEN, EXISTS, or
-   comparison operators (>, <, >=, <=, =) unless the user explicitly
-   specifies the filter or filter value. NEVER invent filter values, and
+7. USER & SYSTEM FILTERS:
+   a) USER FILTERS: Use exact filter values explicitly requested by the user.
+   b) DEFAULT STATUS FILTERS: When a table schema specifies a default status flag (e.g. isActive = 1 or statusCategory = 'Order'), include it for list/lookup questions unless the user explicitly asks for inactive/all records.
+   c) NEVER invent arbitrary filter values not present in DATABASE CONTEXT. NEVER invent filter values, and
    never assume business meanings or synonyms not explicitly present in
    DATABASE CONTEXT. When a column has "Valid filter values" listed in
    DATABASE CONTEXT, use ONLY those values for filtering — never guess or
@@ -287,6 +292,10 @@ NOT_SUPPORTED
 
 USER QUESTION:
 \"\"\"{query}\"\"\"
+
+{intent_hint}{entities_block}{filters_block}
+DATABASE CONTEXT (only tables/columns allowed):
+{context}
 
 Respond with ONLY the SQL query, or exactly NOT_SUPPORTED. No explanations, no markdown."""
 
