@@ -45,7 +45,8 @@ def _build_column_list(col_data: dict) -> list[dict]:
     return cols
 
 
-def _validate_table_schema(table_name: str, col_names: set[str], table_data: dict):
+def _validate_table_schema(table_name: str, col_names: set[str], table_data: dict) -> dict[str, list[str]]:
+    mismatches: dict[str, list[str]] = {}
     for field, label in [
         ("important_columns", "important_columns"),
         ("common_filters", "common_filters"),
@@ -53,17 +54,20 @@ def _validate_table_schema(table_name: str, col_names: set[str], table_data: dic
         ("business_metrics", "business_metrics"),
     ]:
         refs = table_data.get(field, [])
-        for ref in refs:
-            if ref not in col_names:
-                logger.warning("[%s] %s '%s' not found in column definitions", table_name, label, ref)
+        bad = [ref for ref in refs if ref not in col_names]
+        if bad:
+            mismatches[label] = bad
+            logger.warning("[%s] %s %s not found in column definitions", table_name, label, bad)
     pk = table_data.get("primary_key", "")
     if pk and pk not in col_names:
+        mismatches["primary_key"] = [pk]
         logger.warning("[%s] primary_key '%s' not found in column definitions", table_name, pk)
     for fk in table_data.get("foreign_keys", []):
         fk_name = fk.get("name", "")
         if fk_name and fk_name not in col_names:
+            mismatches.setdefault("foreign_keys", []).append(fk_name)
             logger.warning("[%s] foreign_key '%s' not found in column definitions", table_name, fk_name)
-
+    return mismatches
 
 def _merge_table_and_columns(table_data: dict, col_data: dict) -> dict:
     cols = _build_column_list(col_data) if col_data else []
@@ -76,10 +80,10 @@ def _merge_table_and_columns(table_data: dict, col_data: dict) -> dict:
     search_keywords = table_data.get("search_keywords", [])
     common_intents = table_data.get("common_user_intents", [])
     module = table_data.get("module", "")
-    business_metrics = table_data.get("business_metrics", [])
-    common_filters = table_data.get("common_filters", [])
-    common_groupby = table_data.get("common_groupby", [])
-
+    business_metrics = [c for c in table_data.get("business_metrics", []) if c in col_names]
+    common_filters = [c for c in table_data.get("common_filters", []) if c in col_names]
+    common_groupby = [c for c in table_data.get("common_groupby", []) if c in col_names]
+    important_columns = [c for c in table_data.get("important_columns", []) if c in col_names]
     parts = [
         f"Table: {table_name}",
         f"Display: {display_name}" if display_name else "",
@@ -135,10 +139,10 @@ def _merge_table_and_columns(table_data: dict, col_data: dict) -> dict:
         "related_tables": table_data.get("related_tables", []),
         "common_user_intents": common_intents,
         "search_keywords": search_keywords,
-        "important_columns": table_data.get("important_columns", []),
-        "business_metrics": table_data.get("business_metrics", []),
-        "common_filters": table_data.get("common_filters", []),
-        "common_groupby": table_data.get("common_groupby", []),
+        "important_columns": important_columns,   
+        "business_metrics": business_metrics,      
+        "common_filters": common_filters,         
+        "common_groupby": common_groupby,  
         "columns": cols,
         "all_search_terms": all_keywords,
         "text": text,
@@ -147,6 +151,7 @@ def _merge_table_and_columns(table_data: dict, col_data: dict) -> dict:
 
 def load_all_tables() -> dict[str, dict]:
     tables = {}
+    all_mismatches: dict[str, dict[str, list[str]]] = {}
     for f in TABLES_DIR.glob("*.yaml"):
         table_data = _load_yaml(f)
         if not table_data:
@@ -155,6 +160,15 @@ def load_all_tables() -> dict[str, dict]:
         col_path = COLUMNS_DIR / f.name
         col_data = _load_yaml(col_path)
         tables[table_name] = _merge_table_and_columns(table_data, col_data)
+
+    if any(t.get("_schema_mismatches") for t in tables.values()):
+        logger.warning("="*60)
+        logger.warning("METADATA/SCHEMA MISMATCHES DETECTED AT STARTUP: ")
+        for name, t in tables.items():
+            if t.get("_schema_mismatches"):
+                logger.warning("  [%s] %s", name, t["_schema_mismatches"])
+            logger.warning("These fields were silently dropped to prevent LLM hallucination.")
+            logger.warning("=" * 60)
     return tables
 
 def load_joins() -> list[dict]:
