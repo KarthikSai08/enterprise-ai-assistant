@@ -11,8 +11,8 @@ _JSON_EXTRACT = re.compile(r"```(?:json)?\s*([\s\S]*?)\s*```", re.I)
 
 
 INTENT_RULES = [
-    ("COUNT", re.compile(r"\b(count|how many|total number of|number of)\b", re.I)),
-    ("SUM", re.compile(r"\b(total|sum|overall)\b", re.I)),
+    ("COUNT", re.compile(r"\b(count|how many|total number of|number of|count of)\b", re.I)),
+    ("SUM", re.compile(r"\b(sum|overall|total amount|total value|total quantity)\b", re.I)),
     ("AVG", re.compile(r"\b(average|avg|mean)\b", re.I)),
     ("LIST", re.compile(r"\b(list|show|display|get me|fetch|all)\b", re.I)),
     ("FILTER_ACTIVE", re.compile(r"\b(active|enabled|current)\b", re.I)),
@@ -51,6 +51,9 @@ def _llm_available() -> bool:
 
 def detect_intent_rule_based(query: str) -> dict | None:
     matched = [label for label, pattern in INTENT_RULES if pattern.search(query)]
+    if "COUNT" in matched and "SUM" in matched:
+        if re.search(r"\b(total number of|number of|count)\b", query, re.I):
+            matched.remove("SUM")
     if not matched:
         return None
     entity = ACTION_WORDS.sub(" ", query).strip()
