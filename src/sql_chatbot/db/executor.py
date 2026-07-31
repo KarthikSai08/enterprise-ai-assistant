@@ -10,7 +10,9 @@ from sql_chatbot.config import DB_SERVER, DB_NAME, DB_USER, DB_PASS, DB_USE_WIND
 
 logger = logging.getLogger(__name__)
 class SQLValidationError(Exception):
-    pass
+    def __init__(self, message, bad_columns: list[str] | None = None):
+        super().__init__(message)
+        self.bad_columns = bad_columns or []
 
 class SQLQueryExecutionError(Exception):
     pass
@@ -63,7 +65,6 @@ def _validate_columns_ast(tree: exp.Select, valid_columns : set[str]) -> None:
         query_tables.add(real_name.lower())
         if t.alias:
             alias_to_table[t.alias.lower()] = real_name
-
     select_aliases = {a.alias.lower() for a in tree.find_all(exp.Alias) if a.alias}
 
     table_columns: dict[str, set[str]] = {}
@@ -79,24 +80,23 @@ def _validate_columns_ast(tree: exp.Select, valid_columns : set[str]) -> None:
     hallucinated = []
     for c in tree.find_all(exp.Column):
         col_name = c.name
-        if col_name.lower() in select_aliases:
-            continue
-
         table_ref = c.table
         if table_ref:
             real_tbl = alias_to_table.get(table_ref.lower(), table_ref)
-            if f"{real_tbl}.{col_name}".lower()not in lower_valid:
+            if f"{real_tbl}.{col_name}".lower() not in lower_valid:
                 hallucinated.append(f"{real_tbl}.{col_name}")
         else:
             if col_name.lower() not in scoped_unqualified:
                 hallucinated.append(col_name)
 
     if hallucinated:
+        logger.warning(scoped_unqualified)
         logger.warning("DEBUG SQL AST: %r", tree.sql(dialect="tsql"))
         logger.warning("DEBUG HALLUCIATED : %r", hallucinated)
         raise SQLValidationError(
             f"Invalid column names found in SQL: {', '.join(hallucinated[:5])}. "
-            "These do not exist in DATABASE CONTEXT"
+            "These do not exist in DATABASE CONTEXT",
+            bad_columns=hallucinated,
         )
     
 def _cap_top(tree: exp.Select, max_rows: int = 100) -> str:
