@@ -89,7 +89,7 @@ DB_SCHEMA = os.getenv("DB_SCHEMA", "dbo")
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "qwen2.5-coder:7b")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-GROQ_MODEL = os.getenv("GROQ_MODEL", "llama-3.1-8b-instant")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "")
 LLM_PROVIDER = os.getenv("LLM_PROVIDER", "groq")
 
 AGGREGATION_TYPES = {

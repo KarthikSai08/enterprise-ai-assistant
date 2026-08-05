@@ -126,14 +126,15 @@ class EntityValueExtractor:
                         "_importance_rank": {"high": 0, "medium": 1, "low": 2}.get(importance, 3),
                     })
                 matches.sort(key=lambda x: (x["_priority"], x["_importance_rank"]))
-                seen_values_for_phrase: set[str] = set()
+                seen_values_col_pairs : set[tuple[str, str, str]] = set()
                 for m in matches:
-                    if m["value"] in seen_values_for_phrase:
+                    pair_key = (m["table"], m["column"], m["value"])
+                    if pair_key in seen_values_col_pairs:
                         continue
-                    seen_values_for_phrase.add(m["value"])
+                    seen_values_col_pairs.add(pair_key)
                     d = dict(m)
-                    d.pop("_priority")
-                    d.pop("_importance_rank")
+                    d.pop("_priority", None)
+                    d.pop("_importance_rank", None)
                     entities.append(d)
         return entities
 

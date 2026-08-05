@@ -8,12 +8,13 @@ from sql_chatbot.config import RERANKER_MODEL
 logger = logging.getLogger(__name__)
 
 _CACHE_TTL = 300
+_MAX_CACHE_SIZE = 1024
 _cache: dict[str, tuple[float, list[float]]] = {}
 
 
 class Reranker:
     def __init__(self):
-        logger.info("Loading BGE Reranker...")
+        logger.debug("Loading BGE Reranker...")
         self.model = CrossEncoder(RERANKER_MODEL, device="cpu")
 
     def _cached_predict(self, pairs: list[tuple[str, str]]) -> list[float]:
@@ -23,11 +24,14 @@ class Reranker:
             ts, scores = _cache[key]
             if now - ts < _CACHE_TTL:
                 return scores
+
+        if len(_cache) >= _MAX_CACHE_SIZE:
+            oldest_keys = sorted(_cache.keys(), key = lambda k: _cache[k][0])[:256]
+            for k in oldest_keys:
+                _cache.pop(k, None)
+
         raw = self.model.predict(pairs)
-        if isinstance(raw, (int, float)):
-            scores = [float(raw)]
-        else:
-            scores = [float(s) for s in raw]
+        scores = [float(raw)] if isinstance(raw, (int, float)) else [float(s) for s in raw]
         _cache[key] = (now, scores)
         return scores
 

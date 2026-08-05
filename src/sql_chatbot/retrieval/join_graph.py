@@ -65,12 +65,6 @@ class JoinGraph:
     _GENERIC_BRIDGE_DOMAINS = {"geography", "reference", "organization"}
 
     def find_filter_bridge_tables(self, query: str, result_tables: set, domains: list[str] | None = None, max_depth: int = 2) -> dict:
-        """Returns {table_name: hop_distance} for tables not already in
-        result_tables whose column sample_values match the query text,
-        reachable via FK hops from a result table. Expansion is restricted
-        to the query's matched domain(s) plus generic bridge domains
-        (Geography/Reference/Organization) to avoid wandering into
-        unrelated domains through widely-shared reference tables."""
         ql = query.lower()
         allowed = {d.lower() for d in (domains or [])} | self._GENERIC_BRIDGE_DOMAINS
         to_add: dict[str, int] = {}
@@ -108,7 +102,33 @@ class JoinGraph:
                     else:
                         queue.append(new_path)
         return to_add
+    
+    _NAME_ATTR_WORDS = {"name", "title"}
 
+    def find_attribute_bridge_tables(self, query: str, result_tables: set) -> dict[str, int]:
+        ql = query.lower()
+        wants_name = any(w in ql for w in self._NAME_ATTR_WORDS) or True  # UOM has no literal "name" col but is still a lookup ask
+        to_add: dict[str, int] = {}
+        if not wants_name:
+            return to_add
+
+        for t in result_tables:
+            tbl_data = self.tables.get(t, {})
+            for fk in tbl_data.get("foreign_keys", []):
+                ref = fk.get("references", "")
+                if "." not in ref:
+                    continue
+                ref_table = ref.split(".")[0]
+                if ref_table in result_tables or ref_table in to_add:
+                    continue
+                ref_data = self.tables.get(ref_table, {})
+                # does the query mention this entity? (e.g. "product", "warehouse", "uom")
+                entity_terms = {ref_table.lower().replace("tbl_", "").replace("dim_", "").replace("dmn_", "")}
+                entity_terms.update(w.lower() for w in ref_data.get("all_search_terms", [])[:10])
+                if any(term in ql for term in entity_terms if len(term) > 2):
+                    to_add[ref_table] = 1
+        return to_add
+    
     def match_joins(self, query: str, table_names: list[str]) -> list[dict]:
         ql = query.lower()
         ts = set(table_names)

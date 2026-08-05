@@ -22,30 +22,30 @@ class VectorRetriever:
     def index_tables(self, texts: dict[str, str]):
         existing = self.table_collection.count()
         if existing == len(texts):
-            logger.info("Tables already indexed (%d docs), skipping", existing)
+            logger.debug("Tables already indexed (%d docs), skipping", existing)
             return
         if existing > 0:
             self.table_collection.delete(where={})
-            logger.info("Cleared %d stale table embeddings", existing)
+            logger.debug("Cleared %d stale table embeddings", existing)
         names = list(texts.keys())
         docs = [texts[n] for n in names]
-        ids = [f"tbl_{i}" for i in range(len(names))]
+        ids = [f"tbl_{i}" for i in names]
         vecs = self.encoder.encode(docs, batch_size=8)["dense_vecs"]
-        self.table_collection.add(
+        self.table_collection.upsert(
             ids=ids, embeddings=vecs.tolist(),
             metadatas=[{"name": n} for n in names],
             documents=docs
         )
-        logger.info("Indexed %d tables into ChromaDB", len(names))
+        logger.debug("Indexed %d tables into ChromaDB", len(names))
 
     def index_columns(self, texts: dict[str, str]):
         existing = self.column_collection.count()
         if existing == len(texts):
-            logger.info("Columns already indexed (%d docs), skipping", existing)
+            logger.debug("Columns already indexed (%d docs), skipping", existing)
             return
         if existing > 0:
             self.column_collection.delete(where={})
-            logger.info("Cleared %d stale column embeddings", existing)
+            logger.debug("Cleared %d stale column embeddings", existing)
         names = list(texts.keys())
         docs = [texts[n] for n in names]
         ids = [f"col_{i}" for i in range(len(names))]
@@ -55,7 +55,7 @@ class VectorRetriever:
             metadatas=[{"name": n} for n in names],
             documents=docs
         )
-        logger.info("Indexed %d columns into ChromaDB", len(names))
+        logger.debug("Indexed %d columns into ChromaDB", len(names))
 
     def search_tables(self, query: str = "", top_k=10, query_vec=None):
         if query_vec is None:

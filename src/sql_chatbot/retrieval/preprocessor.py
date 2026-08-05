@@ -29,26 +29,27 @@ class QueryPreprocessor:
         raw_tokens = query.lower().split()
         corrected = []
         for token in raw_tokens:
-            if len(token) <= 2 or token in _SKIP_TYPOS:
+            token_clean = token.lower().strip(".,!?;:'\"")
+            if len(token) <= 2 or token in _SKIP_TYPOS or token_clean in self._all_terms:
                 corrected.append(token)
                 continue
             sub_tokens = self._tokenizer.tokenize(token)
             if sub_tokens:
                 for sub in sub_tokens:
-                    if len(sub) <= 2 or sub in _SKIP_TYPOS:
+                    if len(sub) <= 2 or sub in _SKIP_TYPOS or sub.lower() in self._all_terms:
                         corrected.append(sub)
                         continue
                     best = process.extractOne(
                         sub, self._all_terms,
                         scorer=fuzz.WRatio,
-                        score_cutoff=75,
+                        score_cutoff=85,
                     )
                     corrected.append(best[0] if best else sub)
             else:
                 best = process.extractOne(
                     token, self._all_terms,
                     scorer=fuzz.WRatio,
-                    score_cutoff=75,
+                    score_cutoff=85,
                 )
                 corrected.append(best[0] if best else token)
         result = " ".join(corrected)

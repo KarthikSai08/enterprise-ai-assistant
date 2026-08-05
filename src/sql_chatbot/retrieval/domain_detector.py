@@ -1,6 +1,11 @@
 import re
 import numpy as np
-from sql_chatbot.config import DOMAIN_SIM_MIN_ABS, DOMAIN_SIM_GAP, DOMAIN_FILE_FALLBACK_FLOOR
+from sql_chatbot.config import (
+    DOMAIN_SIM_MIN_ABS,
+    DOMAIN_SIM_GAP,
+    DOMAIN_FILE_FALLBACK_FLOOR,
+)
+
 
 class DomainDetector:
     def __init__(self, domains: dict, tables: dict, encoder=None):
@@ -24,7 +29,11 @@ class DomainDetector:
 
     def detect(self, query: str, query_vec=None) -> list[str]:
         if self.domain_centroids and self._encoder:
-            qvec = query_vec if query_vec is not None else self._encoder.encode([query], batch_size=8)["dense_vecs"][0]
+            qvec = (
+                query_vec
+                if query_vec is not None
+                else self._encoder.encode([query], batch_size=8)["dense_vecs"][0]
+            )
             scores = {}
             for dn, centroid in self.domain_centroids.items():
                 norm = np.linalg.norm(qvec) * np.linalg.norm(centroid)
@@ -38,14 +47,24 @@ class DomainDetector:
             return self._match_from_keywords(query)
         return self._match_from_tables(query)
 
-    def _filter_by_similarity(self, scores: dict[str, float], query: str) -> list[str] | None:
+    def _filter_by_similarity(
+        self, scores: dict[str, float], query: str
+    ) -> list[str] | None:
         top_sim = max(scores.values())
-        filtered = {d: s for d, s in scores.items() if s >= max(DOMAIN_SIM_MIN_ABS, top_sim - DOMAIN_SIM_GAP)}
+        filtered = {
+            d: s
+            for d, s in scores.items()
+            if s >= max(DOMAIN_SIM_MIN_ABS, top_sim - DOMAIN_SIM_GAP)
+        }
         if not filtered:
             return None
         file_matched = set(self._match_from_keywords(query))
         if file_matched:
-            filtered = {d: s for d, s in filtered.items() if s >= DOMAIN_FILE_FALLBACK_FLOOR or d in file_matched}
+            filtered = {
+                d: s
+                for d, s in filtered.items()
+                if s >= DOMAIN_FILE_FALLBACK_FLOOR or d in file_matched
+            }
         if not filtered:
             return None
         ranked = sorted(filtered.items(), key=lambda x: -x[1])

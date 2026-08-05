@@ -60,22 +60,22 @@ class Retriever:
 
         texts = {name: t["text"] for name, t in self.tables.items()}
 
-        logger.info("Indexing BM25...")
+        logger.debug("Indexing BM25...")
         self.bm25 = BM25()
         self.bm25.index(texts)
 
-        logger.info("Indexing ChromaDB (BGE-M3)...")
+        logger.debug("Indexing ChromaDB (BGE-M3)...")
         self.vector = VectorRetriever()
         self.vector.index_tables(texts)
 
         self.reranker = Reranker()
 
         if self.column_texts:
-            logger.info("Indexing BM25 columns...")
+            logger.debug("Indexing BM25 columns...")
             self.bm25_columns = BM25()
             self.bm25_columns.index(self.column_texts)
 
-            logger.info("Indexing ChromaDB columns...")
+            logger.debug("Indexing ChromaDB columns...")
             self.vector.index_columns(self.column_texts)
         else:
             self.bm25_columns = BM25()
@@ -85,7 +85,7 @@ class Retriever:
         self._build_keyword_index()
         self.domain_detector = DomainDetector(self.domains, self.tables, self.vector.encoder)
         if self.domain_detector.centroid_count:
-            logger.info("Built %d domain centroids", self.domain_detector.centroid_count)
+            logger.debug("Built %d domain centroids", self.domain_detector.centroid_count)
 
         self.db_connected = False
         if DB_SERVER and DB_NAME:
@@ -176,13 +176,17 @@ class Retriever:
                     sv = str(v).lower()
                     if len(sv) > 2:
                         kws.add(sv)
+                for alias in c.get("aliases", []):
+                    al = alias.lower()
+                    if len(al) > 2:
+                        kws.add(al)
             for kw in kws:
                 self.keyword_to_tables.setdefault(kw, set()).add(name)
 
         for kw in self.keyword_to_tables:
             self.keyword_processor.add_keyword(kw)
 
-        logger.info(
+        logger.debug(
             "Indexed %d unique keywords across %d tables (flashtext2)",
             len(self.keyword_to_tables), len(self.tables)
         )
@@ -210,17 +214,17 @@ class Retriever:
         domains = self.domain_detector.detect(corrected, query_vec)
         query_type = self.preprocessor.classify_query(qn, domains)
 
-        logger.info(query_type)
         if query_type == "ambiguous":
             k = 5
         else:
             k = 3
+        join_intent_words = {"name", "with", "and", "uom", "warehouse", "product"}
+        if query_type == "multi_table" and len(set(ql.split()) & join_intent_words) >= 2:
+            k = max(k, 5) 
 
         candidate_pool = max(k * CANDIDATE_POOL_MULTIPLIER, CANDIDATE_POOL_MIN)
         rrf_k = max(k * RRF_K_MULTIPLIER, RRF_K_MIN)
         reranker_k = max(k * RERANKER_K_MULTIPLIER, RERANKER_K_MIN)
-
-        logger.info(candidate_pool)
         
         bm = self.bm25.search(qn, candidate_pool)
         vc = self.vector.search_tables(top_k=TOP_K, query_vec=query_vec)
@@ -418,8 +422,9 @@ class Retriever:
                 cols = [c["name"] for c in t.get("columns", [])[:3]]
             important = t.get("important_columns", [])
             metrics = t.get("business_metrics", [])
-            priority_cols = dict.fromkeys(important + metrics)
-            for cname in list(priority_cols):
+            valid_table_col_names = {c["name"] for c in t.get("columns", [])}
+            priority_cols = [cname for cname in dict.fromkeys(important + metrics) if cname in valid_table_col_names]
+            for cname in priority_cols:
                 if cname in cols:
                     cols.remove(cname)
                 cols.insert(0, cname)
@@ -472,9 +477,10 @@ class Retriever:
                 "columns": cols[:col_cap],
                 "all_columns": [c["name"] for c in t.get("columns", [])],
                 "column_samples": column_samples,
-                "important_columns": t.get("important_columns", []),
                 "common_filters": t.get("common_filters", []),
                 "common_groupby": t.get("common_groupby", []),
+                "important_columns": [c for c in t.get("important_columns", []) if c in valid_table_col_names],
+                "business_metrics": [c for c in t.get("business_metrics", []) if c in valid_table_col_names],
                 "suggested_joins": table_joins,
                 "matching_rules": matching_rules,
                 "primary_key": t.get("primary_key", ""),
@@ -484,6 +490,8 @@ class Retriever:
 
         result_table_names = {r["table"] for r in results}
         bridge_hits = self.join_graph.find_filter_bridge_tables(query, result_table_names, domains, max_depth=2)
+        attr_bridge_hits = self.join_graph.find_attribute_bridge_tables(query, result_table_names)
+        bridge_hits = {**bridge_hits, **attr_bridge_hits}
         bridge_tables = sorted(bridge_hits, key=lambda t: (bridge_hits[t], t))[:4]
         for name in bridge_tables:
             t = self.tables.get(name, {})
@@ -505,7 +513,8 @@ class Retriever:
                 "columns": cols[:col_cap],
                 "all_columns": [c["name"] for c in t.get("columns", [])],
                 "column_samples": column_samples,
-                "important_columns": t.get("important_columns", []),
+                "important_columns": [c for c in t.get("important_columns", []) if c in valid_table_col_names],
+                "business_metrics": [c for c in t.get("business_metrics", []) if c in valid_table_col_names],
                 "common_filters": t.get("common_filters", []),
                 "common_groupby": t.get("common_groupby", []),
                 "suggested_joins": [j for j in self.joins if j["from"] == name or j["to"] == name][:3],
@@ -516,7 +525,7 @@ class Retriever:
                 "bridge": True,
             })
 
-        result_table_names = {r["table"] for r in results}
+        _table_names = {r["table"] for r in results}
         if locked_tables:
             for name in locked_tables:
                 if name in result_table_names:
@@ -540,7 +549,8 @@ class Retriever:
                     "columns": cols[:col_cap],
                     "all_columns": [c["name"] for c in t.get("columns", [])],
                     "column_samples": column_samples,
-                    "important_columns": t.get("important_columns", []),
+                    "important_columns": [c for c in t.get("important_columns", []) if c in valid_table_col_names],
+                    "business_metrics": [c for c in t.get("business_metrics", []) if c in valid_table_col_names],
                     "common_filters": t.get("common_filters", []),
                     "common_groupby": t.get("common_groupby", []),
                     "suggested_joins": [j for j in self.joins if j["from"] == name or j["to"] == name][:3],
